@@ -1,0 +1,309 @@
+# Simulation tests. Run headless with tools/run_tests.ps1 - no phone, no window, no editor.
+extends RefCounted
+
+var failures: Array[String] = []
+var checks: int = 0
+
+func expect(condition: bool, message: String) -> void:
+	checks += 1
+	if not condition:
+		failures.append(message)
+
+func expect_eq(actual, expected, message: String) -> void:
+	checks += 1
+	if actual != expected:
+		failures.append("%s (got %s, expected %s)" % [message, actual, expected])
+
+# --- World generation ---
+
+func test_world_generation_is_deterministic() -> void:
+	var a := WorldGen.generate(12345)
+	var b := WorldGen.generate(12345)
+	expect(a["terrain"] == b["terrain"], "same seed must produce the same terrain")
+	expect(a["starts"] == b["starts"], "same seed must produce the same start cells")
+
+func test_different_seeds_differ() -> void:
+	var same := 0
+	for seed_value in range(1, 20):
+		if WorldGen.generate(seed_value)["terrain"] == WorldGen.generate(seed_value + 100)["terrain"]:
+			same += 1
+	expect_eq(same, 0, "different seeds must produce different maps")
+
+func test_sea_percentage_stays_in_range() -> void:
+	var seen: Dictionary = {}
+	for seed_value in range(1, 60):
+		var world := WorldGen.generate(seed_value)
+		var pct := int(world["sea_percent"])
+		seen[pct] = true
+		expect(pct >= Balance.SEA_PERCENT_MIN - 1 and pct <= Balance.SEA_PERCENT_MAX,
+			"sea share %d%% is outside the designed 5-15%%" % pct)
+	expect(seen.size() > 3, "sea share should vary between seeds, not sit on one value")
+
+func test_start_cells_are_land_and_apart() -> void:
+	for seed_value in range(1, 60):
+		var world := WorldGen.generate(seed_value)
+		var terrain: PackedByteArray = world["terrain"]
+		var starts: PackedInt32Array = world["starts"]
+		expect_eq(starts.size(), 2, "two players means two start cells")
+		expect(starts[0] != starts[1], "players must not share a start cell")
+		for c in starts:
+			expect(c >= 0, "start cell must exist")
+			expect_eq(terrain[c], WorldGen.LAND, "start cell must be land")
+		var w := Balance.MAP_WIDTH
+		var dist := absi(starts[0] % w - starts[1] % w) + absi(starts[0] / w - starts[1] / w)
+		expect(dist >= 10, "start cells too close on seed %d (distance %d)" % [seed_value, dist])
+
+# --- Economy ---
+
+func test_base_income_and_cap() -> void:
+	var s := GameState.create(7)
+	expect_eq(s.coins[0], 0, "match starts with no coins")
+	for i in range(10):
+		s.tick()
+	expect_eq(s.coins[0], 1 * Balance.UNIT, "one second of base income is one coin")
+	expect_eq(s.power[0], 1 * Balance.UNIT, "one second of base income is one power")
+	# 100 coins at 1/s takes 100 seconds; run past that to prove the cap holds.
+	for i in range(120 * Balance.TICKS_PER_SECOND):
+		s.tick()
+	expect_eq(s.coins[0], Balance.BASE_COIN_CAP, "coins must stop at the storage cap")
+	expect_eq(s.power[0], Balance.BASE_POWER_CAP, "power must stop at the storage cap")
+
+func test_bank_raises_the_coin_cap() -> void:
+	var s := _state_with_coins(7, 200 * Balance.UNIT)
+	var home := _home_of(s, 0)
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BANK)), "",
+		"a bank should be buildable with enough coins")
+	expect_eq(int(s.aggregate(0)["coin_cap"]), Balance.BASE_COIN_CAP + 10 * Balance.UNIT,
+		"a bank adds ten coins of storage")
+
+func test_factory_needs_a_free_person() -> void:
+	var s := _state_with_coins(7, 500 * Balance.UNIT)
+	var home := _home_of(s, 0)
+	var second := _grant_cell(s, 0, home)
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.FACTORY)),
+		"not_enough_people", "a factory without population must be refused")
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE)), "",
+		"a house should be buildable")
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, second, Balance.Building.FACTORY)), "",
+		"a factory should be buildable once a house exists")
+	expect_eq(int(s.aggregate(0)["free_people"]), 1, "one of the two residents now works the factory")
+
+func test_demolish_refunds_half() -> void:
+	var s := _state_with_coins(7, 100 * Balance.UNIT)
+	var home := _home_of(s, 0)
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE))
+	expect_eq(s.coins[0], 70 * Balance.UNIT, "a house costs thirty coins")
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.DEMOLISH, home)), "",
+		"own building should be demolishable")
+	expect_eq(s.coins[0], 85 * Balance.UNIT, "demolition refunds half the price")
+	expect_eq(int(s.building_at[home]), Balance.Building.NONE, "the cell is empty again")
+
+func test_demolishing_a_bank_clamps_the_purse() -> void:
+	var s := _state_with_coins(7, 200 * Balance.UNIT)
+	var home := _home_of(s, 0)
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BANK))
+	s.coins[0] = int(s.aggregate(0)["coin_cap"])
+	s.apply_command(0, GameState.make_command(GameState.Command.DEMOLISH, home))
+	expect_eq(s.coins[0], Balance.BASE_COIN_CAP, "losing the bank must clamp coins to the smaller cap")
+
+# --- Capture ---
+
+func test_capture_costs_power_and_needs_adjacency() -> void:
+	var s := GameState.create(7)
+	var home := _home_of(s, 0)
+	var far := _far_land_cell(s, home)
+	s.power[0] = 50 * Balance.UNIT
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, far)), "not_adjacent",
+		"cells away from the border cannot be taken")
+	var next_to_home := _land_neighbour(s, home)
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, next_to_home)), "",
+		"a bordering cell should be capturable")
+	expect_eq(s.power[0], 40 * Balance.UNIT, "a capture costs ten power")
+	expect_eq(int(s.owner_of[next_to_home]), 0, "the cell changed hands")
+
+func test_capture_is_refused_without_power() -> void:
+	var s := GameState.create(7)
+	var home := _home_of(s, 0)
+	s.power[0] = 9 * Balance.UNIT
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, _land_neighbour(s, home))),
+		"not_enough_power", "nine power is not enough for a capture")
+
+func test_capture_razes_the_building_and_frees_the_worker() -> void:
+	var s := _state_with_coins(7, 500 * Balance.UNIT)
+	var victim_home := _home_of(s, 1)
+	var victim_second := _grant_cell(s, 1, victim_home)
+	s.coins[1] = 500 * Balance.UNIT
+	s.apply_command(1, GameState.make_command(GameState.Command.BUILD, victim_home, Balance.Building.HOUSE))
+	s.apply_command(1, GameState.make_command(GameState.Command.BUILD, victim_second, Balance.Building.FACTORY))
+	expect_eq(int(s.aggregate(1)["free_people"]), 1, "the factory occupies one of the two residents")
+	# Hand the attacker a cell next to the factory so the capture is legal.
+	var beachhead := _grant_cell(s, 0, victim_second)
+	s.power[0] = 50 * Balance.UNIT
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, victim_second)), "",
+		"the factory cell should be capturable")
+	expect_eq(int(s.building_at[victim_second]), Balance.Building.NONE, "the captured building is destroyed")
+	expect_eq(int(s.aggregate(1)["free_people"]), 2, "losing the factory returns its worker to the pool")
+	expect(beachhead >= 0, "the attacker had a staging cell")
+
+func test_losing_the_last_cell_ends_the_match() -> void:
+	var s := GameState.create(7)
+	var victim_home := _home_of(s, 1)
+	_grant_cell(s, 0, victim_home)
+	s.power[0] = 50 * Balance.UNIT
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, victim_home)), "",
+		"the last enemy cell should be capturable")
+	expect_eq(int(s.alive[1]), 0, "a player with no cells is out")
+	expect(s.finished, "the match is over")
+	expect_eq(s.winner, 0, "the surviving player wins")
+
+# --- Ports and ships ---
+
+func test_port_requires_a_coast() -> void:
+	var s := _state_with_coins(7, 500 * Balance.UNIT)
+	s.power[0] = 100 * Balance.UNIT
+	var inland := _inland_cell(s, 0)
+	var coastal := _coastal_cell(s, 0)
+	expect(inland >= 0 and coastal >= 0, "seed 7 should offer both an inland and a coastal cell")
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, inland, Balance.Building.PORT)),
+		"needs_coast", "a port away from water must be refused")
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, coastal, Balance.Building.PORT)), "",
+		"a port on the coast should be buildable")
+
+func test_ship_crosses_the_sea_and_takes_the_cell() -> void:
+	var s := _state_with_coins(7, 500 * Balance.UNIT)
+	s.power[0] = 100 * Balance.UNIT
+	var route := _find_sea_route(s, 0)
+	expect(not route.is_empty(), "seed 7 should offer a port cell with land across the water")
+	if route.is_empty():
+		return
+	var port_cell := int(route["port"])
+	var target := int(route["target"])
+	s.owner_of[port_cell] = 0
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, port_cell, Balance.Building.PORT))
+	var power_before := s.power[0]
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.LAUNCH_SHIP, port_cell, target)), "",
+		"launching across open water should be allowed")
+	expect_eq(s.power[0], power_before - Balance.SHIP_POWER_COST, "a launch costs ten power")
+	expect_eq(s.ships.size(), 1, "the ship is at sea")
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.LAUNCH_SHIP, port_cell, target)),
+		"port_busy", "one port sails one ship at a time")
+	var distance := int((s.ships[0]["path"] as PackedInt32Array).size())
+	for i in range(distance * Balance.SHIP_TICKS_PER_CELL):
+		s.tick()
+	expect_eq(s.ships.size(), 0, "the ship is gone once it lands")
+	expect_eq(int(s.owner_of[target]), 0, "the landing captured the target cell")
+
+func test_ship_cannot_sail_over_land() -> void:
+	var s := GameState.create(7)
+	var home := _home_of(s, 0)
+	var neighbour := _land_neighbour(s, home)
+	expect(s.sea_path(home, neighbour).is_empty(), "a route with no water is not a sea route")
+
+# --- Determinism ---
+
+func test_two_runs_of_the_same_commands_match() -> void:
+	var a := GameState.create(4242)
+	var b := GameState.create(4242)
+	for step in range(400):
+		a.tick()
+		b.tick()
+		if step % 37 == 0:
+			var cell := _first_capturable(a, 0)
+			if cell >= 0:
+				var cmd := GameState.make_command(GameState.Command.CAPTURE, cell)
+				a.apply_command(0, cmd)
+				b.apply_command(0, cmd)
+		expect_eq(a.state_hash(), b.state_hash(), "states diverged at tick %d" % step)
+		if a.finished:
+			break
+
+func test_hash_notices_a_difference() -> void:
+	var a := GameState.create(99)
+	var b := GameState.create(99)
+	b.coins[0] += 1
+	expect(a.state_hash() != b.state_hash(), "the hash must catch a one-unit difference")
+
+# --- Helpers ---
+
+func _home_of(s: GameState, player: int) -> int:
+	for i in range(s.owner_of.size()):
+		if s.owner_of[i] == player:
+			return i
+	return -1
+
+func _state_with_coins(seed_value: int, amount: int) -> GameState:
+	var s := GameState.create(seed_value)
+	s.coins[0] = amount
+	return s
+
+# Gives a player one more land cell next to `near`, bypassing the power cost.
+func _grant_cell(s: GameState, player: int, near: int) -> int:
+	for n in s.neighbours(near):
+		if s.is_land(n) and s.owner_of[n] == GameState.NEUTRAL:
+			s.owner_of[n] = player
+			return n
+	return -1
+
+func _land_neighbour(s: GameState, cell: int) -> int:
+	for n in s.neighbours(cell):
+		if s.is_land(n):
+			return n
+	return -1
+
+func _far_land_cell(s: GameState, from: int) -> int:
+	var w := s.width
+	for i in range(s.owner_of.size()):
+		if not s.is_land(i) or s.owner_of[i] != GameState.NEUTRAL:
+			continue
+		if absi(i % w - from % w) + absi(i / w - from / w) > 3:
+			return i
+	return -1
+
+func _inland_cell(s: GameState, player: int) -> int:
+	var home := _home_of(s, player)
+	for i in range(s.owner_of.size()):
+		if s.is_land(i) and not s.touches_sea(i) and s.owner_of[i] == GameState.NEUTRAL:
+			s.owner_of[i] = player
+			return i
+	return home
+
+func _coastal_cell(s: GameState, player: int) -> int:
+	for i in range(s.owner_of.size()):
+		if s.is_land(i) and s.touches_sea(i) and s.owner_of[i] == GameState.NEUTRAL:
+			s.owner_of[i] = player
+			return i
+	return -1
+
+# Looks for a coastal cell with a straight open-water line to land on another shore.
+# Only the eight compass directions are walked: for those, a straight walk is exactly
+# what sea_path() computes, and it keeps the search cheap enough to run every time.
+func _find_sea_route(s: GameState, player: int) -> Dictionary:
+	var directions := [
+		Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+		Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
+	]
+	for from in range(s.owner_of.size()):
+		if not s.is_land(from) or not s.touches_sea(from):
+			continue
+		for dir in directions:
+			var x := from % s.width
+			var y := from / s.width
+			var crossed := 0
+			for step in range(1, 14):
+				x += dir.x
+				y += dir.y
+				if not s.in_bounds(x, y):
+					break
+				var cell := s.index_of(x, y)
+				if s.is_land(cell):
+					if crossed > 0 and s.owner_of[cell] == GameState.NEUTRAL:
+						return {"port": from, "target": cell}
+					break
+				crossed += 1
+	return {}
+
+func _first_capturable(s: GameState, player: int) -> int:
+	for i in range(s.owner_of.size()):
+		if s.is_land(i) and s.owner_of[i] != player and s.touches_player(i, player):
+			return i
+	return -1
