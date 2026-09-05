@@ -24,6 +24,7 @@ Design notes (Russian): [Notes/Игра Regions.md](Notes/Игра%20Regions.md)
 | M9 — land pays, so holding ground is worth something | done |
 | M10 — world settings, free play, worlds up to 1000 across | done |
 | M11 — construction takes time, pause menu, settings | done |
+| M12 — saved worlds and a nickname | done |
 | M5 — practice match against a bot, three difficulties | done |
 
 Buildings take five to fifteen seconds to go up, depending on what they are. A building
@@ -48,6 +49,17 @@ un.ps1 -Practice    # straight into a match against the bot
 The desktop build is the same game, mouse instead of finger: drag to pan, wheel to zoom,
 click where you would tap. A PC can host a room that phones join, which is the easiest
 way to test a match.
+
+## Keeping a world
+
+A world you play alone - free play, or a match against the bot - can be saved from the
+pause menu and picked up from the lobby. A save is the simulation's own snapshot, the
+same thing the host sends a client that has drifted, so there is one definition of "the
+whole state" rather than two that can fall out of step. Half of a match against another
+phone is not a world, so those cannot be saved; the button is simply absent.
+
+Your nickname is set in the settings and is what the other player sees, both in the room
+list and in the match.
 
 ## Choosing a world
 

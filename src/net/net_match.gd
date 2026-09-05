@@ -47,6 +47,12 @@ var bot: BotPlayer = null
 # The world the host chose. It travels to the joiner at match start, so both sides
 # generate the same map from the same seed.
 var settings := WorldSettings.new()
+# What the two sides call themselves. Exchanged when a match starts, so the panels
+# can say who did something rather than "the opponent".
+var opponent_name := ""
+# The name this world is saved under, so saving again overwrites rather than piling
+# up a new file every time.
+var save_label := ""
 
 var _tick_seconds := 1.0 / float(Balance.TICKS_PER_SECOND)
 var _accumulator := 0.0
@@ -110,6 +116,8 @@ func leave() -> void:
 	bot = null
 	local_player = -1
 	opponent_focus = -1
+	opponent_name = ""
+	save_label = ""
 	_pending.clear()
 	_hash_log.clear()
 	_peer_of_player.clear()
@@ -127,6 +135,28 @@ func start_solo(seed_value: int, world: WorldSettings = null) -> void:
 # A world with nobody else in it: no opponent, no clock, no winning or losing. The same
 # tick loop and the same rules, which is the whole point - it is somewhere to learn the
 # game and somewhere to just build.
+# Picks a world back up where it was left. The state is already made, so nothing is
+# generated: the snapshot is the world.
+func resume(state: GameState, bot_level: int) -> void:
+	leave()
+	settings = state.settings if state.settings != null else WorldSettings.new()
+	is_host = true
+	if bot_level >= 0 and state.alive.size() > 1:
+		bot = BotPlayer.new(1, bot_level, state.map_seed ^ state.tick_count)
+	self.state = state
+	local_player = 0
+	mode = Mode.PLAYING
+	paused = false
+	_accumulator = 0.0
+	_hash_log.clear()
+	emit_signal("match_started")
+
+# Whether this world is one person's to save. Half of a match against another phone is
+# not a world.
+func can_save() -> bool:
+	return mode == Mode.PLAYING and state != null \
+		and not multiplayer.has_multiplayer_peer()
+
 func start_free(world: WorldSettings) -> void:
 	world.mode = WorldSettings.Mode.FREE
 	leave()
@@ -158,7 +188,7 @@ func _on_peer_connected(id: int) -> void:
 	_peer_of_player[1] = id
 	discovery.stop_broadcast()
 	var seed_value := int(Time.get_unix_time_from_system()) ^ (randi() & 0xFFFF)
-	_begin_match.rpc_id(id, seed_value, 1, settings.to_dict())
+	_begin_match.rpc_id(id, seed_value, 1, settings.to_dict(), Prefs.display_name())
 	_start_local(seed_value, 0)
 
 func _on_peer_disconnected(_id: int) -> void:
@@ -192,9 +222,16 @@ func _start_local(seed_value: int, player: int) -> void:
 	emit_signal("match_started")
 
 @rpc("authority", "call_remote", "reliable")
-func _begin_match(seed_value: int, player: int, world: Dictionary) -> void:
+func _begin_match(seed_value: int, player: int, world: Dictionary, host_name: String) -> void:
 	settings = WorldSettings.from_dict(world)
+	opponent_name = host_name
 	_start_local(seed_value, player)
+	# The host does not know what to call us until we say so.
+	_introduce.rpc_id(1, Prefs.display_name())
+
+@rpc("any_peer", "call_remote", "reliable")
+func _introduce(name: String) -> void:
+	opponent_name = name
 
 @rpc("authority", "call_remote", "reliable")
 func _host_closing() -> void:

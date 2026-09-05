@@ -22,6 +22,7 @@ var _rooms_box: VBoxContainer
 var _address: LineEdit
 var _level_button: OptionButton
 var _size_note: Label
+var _saves_box: VBoxContainer
 
 func _ready() -> void:
 	var paper := UiKit.Paper.new()
@@ -65,6 +66,7 @@ func _ready() -> void:
 	Music.set_mood("calm")
 	Net.browse_rooms()
 	_refresh_rooms()
+	_refresh_saves()
 
 func _menu_column() -> Control:
 	var column := VBoxContainer.new()
@@ -126,6 +128,11 @@ func _card_contents() -> Control:
 	var host := _big_button(I18n.t("host_game"))
 	host.pressed.connect(_on_host)
 	box.add_child(host)
+
+	box.add_child(_divider(I18n.t("saves")))
+	_saves_box = VBoxContainer.new()
+	_saves_box.add_theme_constant_override("separation", 6)
+	box.add_child(_saves_box)
 
 	box.add_child(_divider(I18n.t("world")))
 	box.add_child(_world_settings())
@@ -268,6 +275,48 @@ func _divider(text: String) -> Control:
 	row.add_child(rule)
 	return row
 
+# Saved worlds, newest first, each with what it is and a way to throw it away.
+func _refresh_saves() -> void:
+	for child in _saves_box.get_children():
+		child.queue_free()
+	var saves := SaveGame.list_saves()
+	if saves.is_empty():
+		var empty := UiKit.body(I18n.t("no_saves"), 13, Ink.INK_SOFT)
+		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_saves_box.add_child(empty)
+		return
+	for save in saves:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		var open := Button.new()
+		var minutes := int(save["ticks"]) / Balance.TICKS_PER_SECOND / 60
+		open.text = "%s   ·   %d×%d   ·   %d %s" % [str(save["label"]),
+			int(save["width"]), int(save["height"]), minutes, I18n.t("minutes")]
+		open.custom_minimum_size.y = 42
+		open.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		UiKit.button(open, Ink.PENS[0])
+		open.pressed.connect(_load_save.bind(str(save["slot"]), str(save["label"])))
+		row.add_child(open)
+		var drop := Button.new()
+		drop.text = "✕"
+		drop.custom_minimum_size = Vector2(44, 42)
+		drop.tooltip_text = I18n.t("delete")
+		UiKit.button(drop, Ink.PENS[1])
+		drop.pressed.connect(func():
+			SaveGame.erase(str(save["slot"]))
+			_refresh_saves())
+		row.add_child(drop)
+		_saves_box.add_child(row)
+
+func _load_save(slot: String, label: String) -> void:
+	var state := SaveGame.load_state(slot)
+	if state == null:
+		_status.text = I18n.reason("could_not_write")
+		_refresh_saves()
+		return
+	Net.resume(state, SaveGame.bot_level_of(slot))
+	Net.save_label = label
+
 func _on_practice() -> void:
 	Net.start_practice(bot_level, 0, _chosen_world())
 
@@ -284,8 +333,7 @@ func _join(ip: String) -> void:
 	Net.join_room(ip)
 
 func _default_room_name() -> String:
-	var name := OS.get_model_name()
-	return name if not name.is_empty() else "Regions"
+	return Prefs.display_name()
 
 func _refresh_rooms() -> void:
 	for child in _rooms_box.get_children():

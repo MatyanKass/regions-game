@@ -24,6 +24,27 @@ func _init() -> void:
 	header.add_child(close)
 	column.add_child(header)
 
+	var nick_row := HBoxContainer.new()
+	nick_row.add_theme_constant_override("separation", 10)
+	var nick_label := UiKit.body(I18n.t("nickname"), 14, Ink.INK_SOFT)
+	nick_label.custom_minimum_size.x = 150
+	nick_row.add_child(nick_label)
+	var nick := LineEdit.new()
+	nick.text = Prefs.nickname
+	nick.placeholder_text = Prefs.display_name()
+	nick.max_length = 20
+	nick.custom_minimum_size = Vector2(190, 38)
+	UiKit.line_edit(nick)
+	# Saved as it is typed: there is no confirm button, so there must be no way to type a
+	# name and lose it by closing the panel.
+	nick.text_changed.connect(func(value: String): Prefs.set_nickname(value))
+	nick_row.add_child(nick)
+	column.add_child(nick_row)
+	var nick_note := UiKit.body(I18n.t("nickname_hint"), 12, Ink.INK_SOFT)
+	nick_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	nick_note.custom_minimum_size.x = 340
+	column.add_child(nick_note)
+
 	column.add_child(_slider(I18n.t("music_volume"), Prefs.music_volume,
 		func(value: float): Prefs.set_music_volume(value)))
 	column.add_child(_slider(I18n.t("sfx_volume"), Prefs.sfx_volume,

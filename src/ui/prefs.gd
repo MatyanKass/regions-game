@@ -15,6 +15,7 @@ const SFX_BUS := "Sfx"
 var music_volume := 0.7
 var sfx_volume := 0.9
 var language := ""   # empty means "follow the system"
+var nickname := ""   # empty means "whatever this device is called"
 
 func _ready() -> void:
 	_ensure_bus(MUSIC_BUS)
@@ -38,6 +39,21 @@ func set_sfx_volume(value: float) -> void:
 	sfx_volume = clampf(value, 0.0, 1.0)
 	_apply()
 	save()
+
+# What other players see. Kept short enough to fit a room list and stripped of the
+# newlines a paste could bring in.
+func set_nickname(value: String) -> void:
+	nickname = value.strip_edges().replace("\n", " ").substr(0, 20)
+	save()
+	emit_signal("changed")
+
+# The nickname to actually show, falling back to the name of the device rather than to
+# an empty label.
+func display_name() -> String:
+	if not nickname.is_empty():
+		return nickname
+	var model := OS.get_model_name()
+	return model if not model.is_empty() else "Regions"
 
 func set_language(code: String) -> void:
 	language = code
@@ -65,6 +81,7 @@ func load_now() -> void:
 		music_volume = clampf(float(file.get_value("audio", "music", music_volume)), 0.0, 1.0)
 		sfx_volume = clampf(float(file.get_value("audio", "sfx", sfx_volume)), 0.0, 1.0)
 		language = str(file.get_value("ui", "language", ""))
+		nickname = str(file.get_value("ui", "nickname", ""))
 	if language.is_empty():
 		I18n.detect_language()
 		language = I18n.language
@@ -77,4 +94,5 @@ func save() -> void:
 	file.set_value("audio", "music", music_volume)
 	file.set_value("audio", "sfx", sfx_volume)
 	file.set_value("ui", "language", language)
+	file.set_value("ui", "nickname", nickname)
 	file.save(PATH)

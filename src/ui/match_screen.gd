@@ -97,7 +97,9 @@ func _centre_on_home() -> void:
 # In a practice match the other seat is the bot, and saying so is the difference between
 # "the opponent is quiet" and "the bot is thinking".
 func _opponent_name() -> String:
-	return I18n.t("bot") if Net.bot != null else I18n.t("opponent")
+	if Net.bot != null:
+		return "%s (%s)" % [I18n.t("bot"), I18n.bot_level_name(Net.bot.level)]
+	return Net.opponent_name if not Net.opponent_name.is_empty() else I18n.t("opponent")
 
 # --- HUD construction ------------------------------------------------------------
 
@@ -275,9 +277,27 @@ func _open_pause() -> void:
 	_overlay_details.visible = false
 	_clear_overlay_actions()
 	_add_overlay_action(I18n.t("resume"), _close_pause)
+	if Net.can_save():
+		_add_overlay_action(I18n.t("save_game"), _save_world)
 	_add_overlay_action(I18n.t("settings"), _show_settings)
 	_add_overlay_action(I18n.t("leave"), func(): emit_signal("exit_requested"))
 	_overlay.visible = true
+
+# Saves under the name the world already had, or a new one if this is the first time.
+# There is no slot picker: a world is a thing you keep, not a numbered file.
+func _save_world() -> void:
+	var label := Net.save_label
+	if label.is_empty():
+		label = "%s %d×%d" % [I18n.t("world"), Net.state.width, Net.state.height]
+		Net.save_label = label
+	var slot := SaveGame.slot_for(label)
+	var bot_level := Net.bot.level if Net.bot != null else -1
+	var problem := SaveGame.store(slot, label, Net.state, bot_level)
+	if problem.is_empty():
+		_show_toast("%s: %s" % [I18n.t("saved"), label])
+	else:
+		_show_toast(I18n.reason(problem))
+	_overlay.visible = false
 
 func _show_settings() -> void:
 	_overlay.visible = false
@@ -621,7 +641,7 @@ func _tap_info(st: GameState, cell: int) -> void:
 	else:
 		var agg := st.aggregate(owner_id)
 		var per_second := float(Balance.TICKS_PER_SECOND) / float(Balance.UNIT)
-		lines.append(I18n.t("you") if owner_id == Net.local_player else _opponent_name())
+		lines.append(Prefs.display_name() if owner_id == Net.local_player else _opponent_name())
 		lines.append("%s: %d" % [I18n.t("cells"), int(agg["cells"])])
 		lines.append("%s: +%.1f/%s" % [I18n.t("coin_rate"),
 			float(agg["coin_per_tick"]) * per_second, I18n.t("second")])
