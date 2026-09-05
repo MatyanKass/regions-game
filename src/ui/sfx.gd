@@ -83,6 +83,7 @@ func _ready() -> void:
 	for i in range(VOICES):
 		var player := AudioStreamPlayer.new()
 		player.volume_db = MASTER_DB
+		player.bus = Prefs.SFX_BUS
 		add_child(player)
 		_players.append(player)
 
@@ -107,6 +108,11 @@ func _load_override(name: String) -> AudioStream:
 				if stream is AudioStream:
 					return stream
 	return null
+
+# The stream behind an effect, for the places that need to position a sound in the world
+# rather than play it flat.
+func stream_for(name: String) -> AudioStream:
+	return _sounds.get(name, null)
 
 func play(name: String) -> void:
 	if not _sounds.has(name):

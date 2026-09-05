@@ -22,7 +22,7 @@ func _ready() -> void:
 		_tracks[mood] = load_folder(str(FOLDERS[mood]))
 		var player := AudioStreamPlayer.new()
 		player.volume_db = QUIET_DB
-		player.bus = "Master"
+		player.bus = Prefs.MUSIC_BUS
 		player.finished.connect(_on_finished.bind(str(mood)))
 		add_child(player)
 		_players[mood] = player

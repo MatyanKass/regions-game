@@ -76,7 +76,7 @@ func test_base_income_and_cap() -> void:
 func test_bank_raises_the_coin_cap() -> void:
 	var s := _state_with_coins(7, 200 * Balance.UNIT)
 	var home := _home_of(s, 0)
-	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BANK)), "",
+	expect_eq(_build_now(s, 0, home, Balance.Building.BANK), "",
 		"a bank should be buildable with enough coins")
 	expect_eq(int(s.aggregate(0)["coin_cap"]), _expected_coin_cap(s, 0, 10 * Balance.UNIT),
 		"a bank adds ten coins of storage on top of what the land holds")
@@ -85,18 +85,18 @@ func test_factory_needs_a_free_person() -> void:
 	var s := _state_with_coins(7, 500 * Balance.UNIT)
 	var home := _home_of(s, 0)
 	var second := _grant_cell(s, 0, home)
-	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.FACTORY)),
+	expect_eq(_build_now(s, 0, home, Balance.Building.FACTORY),
 		"not_enough_people", "a factory without population must be refused")
-	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE)), "",
+	expect_eq(_build_now(s, 0, home, Balance.Building.HOUSE), "",
 		"a house should be buildable")
-	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, second, Balance.Building.FACTORY)), "",
+	expect_eq(_build_now(s, 0, second, Balance.Building.FACTORY), "",
 		"a factory should be buildable once a house exists")
 	expect_eq(int(s.aggregate(0)["free_people"]), 1, "one of the two residents now works the factory")
 
 func test_demolish_refunds_half() -> void:
 	var s := _state_with_coins(7, 100 * Balance.UNIT)
 	var home := _home_of(s, 0)
-	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE))
+	_build_now(s, 0, home, Balance.Building.HOUSE)
 	expect_eq(s.coins[0], 70 * Balance.UNIT, "a house costs thirty coins")
 	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.DEMOLISH, home)), "",
 		"own building should be demolishable")
@@ -106,7 +106,7 @@ func test_demolish_refunds_half() -> void:
 func test_demolishing_a_bank_clamps_the_purse() -> void:
 	var s := _state_with_coins(7, 200 * Balance.UNIT)
 	var home := _home_of(s, 0)
-	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BANK))
+	_build_now(s, 0, home, Balance.Building.BANK)
 	s.coins[0] = int(s.aggregate(0)["coin_cap"])
 	s.apply_command(0, GameState.make_command(GameState.Command.DEMOLISH, home))
 	expect_eq(s.coins[0], _expected_coin_cap(s, 0, 0),
@@ -139,8 +139,8 @@ func test_capture_razes_the_building_and_frees_the_worker() -> void:
 	var victim_home := _home_of(s, 1)
 	var victim_second := _grant_cell(s, 1, victim_home)
 	s.coins[1] = 500 * Balance.UNIT
-	s.apply_command(1, GameState.make_command(GameState.Command.BUILD, victim_home, Balance.Building.HOUSE))
-	s.apply_command(1, GameState.make_command(GameState.Command.BUILD, victim_second, Balance.Building.FACTORY))
+	_build_now(s, 1, victim_home, Balance.Building.HOUSE)
+	_build_now(s, 1, victim_second, Balance.Building.FACTORY)
 	expect_eq(int(s.aggregate(1)["free_people"]), 1, "the factory occupies one of the two residents")
 	# Hand the attacker a cell next to the factory so the capture is legal.
 	var beachhead := _grant_cell(s, 0, victim_second)
@@ -185,7 +185,7 @@ func test_ship_crosses_the_sea_and_takes_the_cell() -> void:
 	var port_cell := int(route["port"])
 	var target := int(route["target"])
 	s.set_cell(port_cell, 0)
-	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, port_cell, Balance.Building.PORT))
+	_build_now(s, 0, port_cell, Balance.Building.PORT)
 	var power_before := s.power[0]
 	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.LAUNCH_SHIP, port_cell, target)), "",
 		"launching across open water should be allowed")
@@ -291,8 +291,8 @@ func test_barrier_stalls_the_attacker() -> void:
 	var wall := _grant_cell(s, 1, victim_home)
 	s.coins[1] = 300 * Balance.UNIT
 	s.power[1] = 100 * Balance.UNIT
-	expect_eq(s.apply_command(1, GameState.make_command(GameState.Command.BUILD, wall,
-		Balance.Building.BARRIER)), "", "a barrier should be buildable")
+	expect_eq(_build_now(s, 1, wall, Balance.Building.BARRIER), "",
+		"a barrier should be buildable")
 	_grant_cell(s, 0, wall)
 	s.power[0] = 50 * Balance.UNIT
 	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, wall)), "",
@@ -304,7 +304,7 @@ func test_barrier_stalls_the_attacker() -> void:
 func test_upgrade_scales_the_effect_and_the_price() -> void:
 	var s := _state_with_coins(7, 1000 * Balance.UNIT)
 	var home := _home_of(s, 0)
-	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BANK))
+	_build_now(s, 0, home, Balance.Building.BANK)
 	expect_eq(int(s.level_at[home]), 1, "a new building starts at level one")
 	var before := int(s.coins[0])
 	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.UPGRADE, home)), "",
@@ -317,7 +317,7 @@ func test_upgrade_scales_the_effect_and_the_price() -> void:
 func test_upgrades_stop_at_the_ceiling() -> void:
 	var s := _state_with_coins(7, 5000 * Balance.UNIT)
 	var home := _home_of(s, 0)
-	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE))
+	_build_now(s, 0, home, Balance.Building.HOUSE)
 	for i in range(Balance.MAX_LEVEL - 1):
 		expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.UPGRADE, home)), "",
 			"upgrade %d should be allowed" % (i + 2))
@@ -331,7 +331,7 @@ func test_a_barrier_cannot_be_upgraded() -> void:
 	var s := _state_with_coins(7, 1000 * Balance.UNIT)
 	s.power[0] = 200 * Balance.UNIT
 	var home := _home_of(s, 0)
-	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BARRIER))
+	_build_now(s, 0, home, Balance.Building.BARRIER)
 	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.UPGRADE, home)),
 		"max_level", "a wall is a wall: one level only")
 
@@ -340,7 +340,7 @@ func test_demolition_refunds_the_upgrades_too() -> void:
 	# and the test would be measuring the cap rather than the refund.
 	var s := _state_with_coins(7, Balance.BASE_COIN_CAP)
 	var home := _home_of(s, 0)
-	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE))
+	_build_now(s, 0, home, Balance.Building.HOUSE)
 	s.apply_command(0, GameState.make_command(GameState.Command.UPGRADE, home))
 	var before := int(s.coins[0])
 	s.apply_command(0, GameState.make_command(GameState.Command.DEMOLISH, home))
@@ -353,7 +353,7 @@ func test_levels_and_cooldowns_survive_a_snapshot() -> void:
 	var s := _state_with_coins(7, 1000 * Balance.UNIT)
 	var home := _home_of(s, 0)
 	s.power[0] = 60 * Balance.UNIT
-	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BANK))
+	_build_now(s, 0, home, Balance.Building.BANK)
 	s.apply_command(0, GameState.make_command(GameState.Command.UPGRADE, home))
 	s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, _land_neighbour(s, home)))
 	var copy := GameState.from_snapshot(s.snapshot())
@@ -370,9 +370,9 @@ func test_losing_housing_idles_a_factory_instead_of_going_negative() -> void:
 	var home := _home_of(s, 0)
 	var second := _grant_cell(s, 0, home)
 	var third := _grant_cell(s, 0, second)
-	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE))
-	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, second, Balance.Building.FACTORY))
-	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, third, Balance.Building.FACTORY))
+	_build_now(s, 0, home, Balance.Building.HOUSE)
+	_build_now(s, 0, second, Balance.Building.FACTORY)
+	_build_now(s, 0, third, Balance.Building.FACTORY)
 	var working := int(s.aggregate(0)["coin_per_tick"])
 	expect_eq(int(s.aggregate(0)["free_people"]), 0, "both residents are at work")
 	expect_eq(int((s.aggregate(0)["idle_cells"] as PackedInt32Array).size()), 0,
@@ -484,7 +484,7 @@ func test_snapshot_carries_ships() -> void:
 		return
 	var port_cell := int(route["port"])
 	s.set_cell(port_cell, 0)
-	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, port_cell, Balance.Building.PORT))
+	_build_now(s, 0, port_cell, Balance.Building.PORT)
 	s.apply_command(0, GameState.make_command(GameState.Command.LAUNCH_SHIP, port_cell, int(route["target"])))
 	var copy := GameState.from_snapshot(s.snapshot())
 	expect_eq(copy.ships.size(), 1, "the ship survives the snapshot")
@@ -505,6 +505,27 @@ func _cells(s: GameState, player: int) -> int:
 
 func _expected_coin_cap(s: GameState, player: int, from_buildings: int) -> int:
 	return Balance.BASE_COIN_CAP + _cells(s, player) * Balance.CELL_COIN_CAP + from_buildings
+
+# Orders a building and lets the work run to the end. Most tests are about what a
+# building does rather than about the time it takes, and waiting is now part of getting
+# one. Coins are restored afterwards so a test that measures a price is not also
+# measuring the income that accrued while the builders were busy.
+func _build_now(s: GameState, player: int, cell: int, type: int) -> String:
+	var coins_before := int(s.coins[player])
+	var power_before := int(s.power[player])
+	var cost_coins := int(Balance.BUILDINGS[type]["coin_cost"])
+	var cost_power := int(Balance.BUILDINGS[type]["power_cost"])
+	var reason := s.apply_command(player,
+		GameState.make_command(GameState.Command.BUILD, cell, type))
+	if not reason.is_empty():
+		return reason
+	var guard := Balance.build_ticks(type) + 5
+	while s.site_index(cell) >= 0 and guard > 0:
+		s.tick()
+		guard -= 1
+	s.coins[player] = coins_before - cost_coins
+	s.power[player] = power_before - cost_power
+	return ""
 
 func _home_of(s: GameState, player: int) -> int:
 	for i in range(s.owner_of.size()):
@@ -576,3 +597,93 @@ func _first_capturable(s: GameState, player: int) -> int:
 		if s.is_land(i) and s.owner_of[i] != player and s.touches_player(i, player):
 			return i
 	return -1
+
+# --- Building takes time ---
+
+func test_a_building_is_not_finished_the_moment_it_is_paid_for() -> void:
+	var s := _state_with_coins(7, Balance.BASE_COIN_CAP)
+	var home := _home_of(s, 0)
+	var before := int(s.aggregate(0)["coin_cap"])
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home,
+		Balance.Building.BANK)), "", "the order should be accepted")
+	expect_eq(int(s.building_at[home]), Balance.Building.NONE,
+		"nothing stands on the cell yet")
+	expect(s.site_index(home) >= 0, "but there is work going on there")
+	expect_eq(int(s.aggregate(0)["coin_cap"]), before,
+		"and a half-built bank holds nothing")
+
+	var ticks := Balance.build_ticks(Balance.Building.BANK)
+	for i in range(ticks - 1):
+		s.tick()
+	expect_eq(int(s.building_at[home]), Balance.Building.NONE, "still not finished")
+	s.tick()
+	expect_eq(int(s.building_at[home]), Balance.Building.BANK, "and now it is")
+	expect_eq(s.site_index(home), -1, "the site is cleared")
+	expect_eq(int(s.aggregate(0)["coin_cap"]),
+		before + 10 * Balance.UNIT, "the finished bank holds its ten coins")
+	expect(s.verify_totals().is_empty(), "and the totals took it into account exactly once")
+
+func test_each_building_takes_its_own_time() -> void:
+	var seen: Dictionary = {}
+	for type in Balance.BUILDINGS:
+		var seconds := int(Balance.BUILDINGS[type]["build_seconds"])
+		expect(seconds >= 5 and seconds <= 15,
+			"%s takes %d seconds, outside the five to fifteen the design asks for"
+				% [str(Balance.BUILDINGS[type]["name"]), seconds])
+		seen[seconds] = true
+	expect(seen.size() >= 4, "the times should differ between buildings, not all be one number")
+
+func test_calling_off_the_work_costs_nothing() -> void:
+	var s := _state_with_coins(7, Balance.BASE_COIN_CAP)
+	var home := _home_of(s, 0)
+	var before := int(s.coins[0])
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE))
+	expect(int(s.coins[0]) < before, "the order is paid for up front")
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.DEMOLISH, home)), "",
+		"work in progress can be called off")
+	expect_eq(int(s.coins[0]), before, "and every coin comes back, since nothing was built")
+	expect_eq(s.site_index(home), -1, "the site is gone")
+
+func test_a_captured_site_is_abandoned() -> void:
+	var s := _state_with_coins(7, Balance.BASE_COIN_CAP)
+	var home := _home_of(s, 0)
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE))
+	_grant_cell(s, 1, home)
+	s.power[1] = 50 * Balance.UNIT
+	expect_eq(s.apply_command(1, GameState.make_command(GameState.Command.CAPTURE, home)), "",
+		"the cell can be taken while it is a building site")
+	expect_eq(s.site_index(home), -1, "and the work is abandoned with it")
+	for i in range(Balance.build_ticks(Balance.Building.HOUSE) + 5):
+		s.tick()
+	expect_eq(int(s.building_at[home]), Balance.Building.NONE,
+		"nothing appears on the captured cell later")
+	expect(s.verify_totals().is_empty(), "the totals stay right")
+
+func test_people_promised_to_a_site_are_not_free() -> void:
+	var s := _state_with_coins(7, 5000 * Balance.UNIT)
+	var home := _home_of(s, 0)
+	var a := _grant_cell(s, 0, home)
+	var b := _grant_cell(s, 0, a)
+	s.set_cell(home, 0, Balance.Building.HOUSE, 1)   # two residents
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, a,
+		Balance.Building.FACTORY)), "", "the first factory is ordered")
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, b,
+		Balance.Building.FACTORY)), "", "and the second, since two people live here")
+	var c := _grant_cell(s, 0, b)
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, c,
+		Balance.Building.FACTORY)), "not_enough_people",
+		"a third has nobody left to work it, even though none of them are built yet")
+
+func test_sites_survive_a_snapshot() -> void:
+	var s := _state_with_coins(7, Balance.BASE_COIN_CAP)
+	var home := _home_of(s, 0)
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BANK))
+	for i in range(10):
+		s.tick()
+	var copy := GameState.from_snapshot(s.snapshot())
+	expect_eq(copy.state_hash(), s.state_hash(), "work in progress travels with a snapshot")
+	expect(copy.site_index(home) >= 0, "the site is there")
+	for i in range(Balance.build_ticks(Balance.Building.BANK)):
+		s.tick()
+		copy.tick()
+	expect_eq(copy.state_hash(), s.state_hash(), "and finishes at the same moment on both")

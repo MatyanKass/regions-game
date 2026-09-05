@@ -32,6 +32,11 @@ var alive: PackedByteArray
 # the rate of fire is the only thing keeping it honest.
 var capture_ready: PackedInt64Array
 var ships: Array[Dictionary] = []
+# Buildings that are going up. A site holds the cell while it is worked on but is not on
+# the grid, so it contributes nothing and the running totals need not know about it. An
+# array rather than a map from cells: it is walked in order every tick, and order is
+# something lockstep cannot leave to chance.
+var sites: Array[Dictionary] = []
 var tick_count: int = 0
 var finished: bool = false
 var winner: int = -1
@@ -312,7 +317,7 @@ func _do_build(player: int, cell: int, type: int) -> String:
 		return "not_your_cell"
 	if not is_land(cell):
 		return "sea_cell"
-	if building_at[cell] != Balance.Building.NONE:
+	if building_at[cell] != Balance.Building.NONE or site_index(cell) >= 0:
 		return "cell_occupied"
 	var d: Dictionary = Balance.BUILDINGS[type]
 	if bool(d["coastal"]) and not touches_sea(cell):
@@ -321,15 +326,67 @@ func _do_build(player: int, cell: int, type: int) -> String:
 		return "not_enough_coins"
 	if power[player] < int(d["power_cost"]):
 		return "not_enough_power"
-	if int(d["workers"]) > 0 and int(aggregate(player)["free_people"]) < int(d["workers"]):
+	# People already promised to work half-built factories are not free, or a player
+	# could queue ten of them on the strength of one house.
+	if int(d["workers"]) > 0 			and int(aggregate(player)["free_people"]) - promised_workers(player) < int(d["workers"]):
 		return "not_enough_people"
 	coins[player] -= int(d["coin_cost"])
 	power[player] -= int(d["power_cost"])
-	_forget(cell)
-	building_at[cell] = type
-	level_at[cell] = 1
-	_remember(cell)
+	sites.append({
+		"cell": cell,
+		"owner": player,
+		"type": type,
+		"started": tick_count,
+		"ready": tick_count + Balance.build_ticks(type),
+	})
 	return ""
+
+# How many residents are already spoken for by work in progress.
+func promised_workers(player: int) -> int:
+	var total := 0
+	for site in sites:
+		if int(site["owner"]) == player:
+			total += int(Balance.BUILDINGS[int(site["type"])]["workers"])
+	return total
+
+# Where in `sites` the work on this cell is, or -1 if nothing is being built there.
+func site_index(cell: int) -> int:
+	for i in range(sites.size()):
+		if int(sites[i]["cell"]) == cell:
+			return i
+	return -1
+
+# How far along the work is, from 0 to 1000. Integers, because the interface is allowed
+# to be approximate but the simulation is not.
+func site_progress(cell: int) -> int:
+	var at := site_index(cell)
+	if at < 0:
+		return 0
+	var site: Dictionary = sites[at]
+	var span := maxi(1, int(site["ready"]) - int(site["started"]))
+	return clampi((tick_count - int(site["started"])) * 1000 / span, 0, 1000)
+
+func _drop_site(cell: int) -> void:
+	var at := site_index(cell)
+	if at >= 0:
+		sites.remove_at(at)
+
+# Work that has finished this tick turns into buildings. Anything whose cell changed
+# hands while it was going up is simply abandoned - it was never built.
+func _advance_sites() -> void:
+	var kept: Array[Dictionary] = []
+	for site in sites:
+		var cell := int(site["cell"])
+		if int(owner_of[cell]) != int(site["owner"]) or building_at[cell] != Balance.Building.NONE:
+			continue
+		if tick_count < int(site["ready"]):
+			kept.append(site)
+			continue
+		_forget(cell)
+		building_at[cell] = int(site["type"])
+		level_at[cell] = 1
+		_remember(cell)
+	sites = kept
 
 func _do_upgrade(player: int, cell: int) -> String:
 	if cell < 0 or cell >= owner_of.size():
@@ -360,6 +417,16 @@ func _do_demolish(player: int, cell: int) -> String:
 		return "bad_cell"
 	if owner_of[cell] != player:
 		return "not_your_cell"
+	var pending := site_index(cell)
+	if pending >= 0:
+		# Calling off the work costs nothing: no bricks have been laid.
+		var site: Dictionary = sites[pending]
+		var d: Dictionary = Balance.BUILDINGS[int(site["type"])]
+		coins[player] += int(d["coin_cost"])
+		power[player] += int(d["power_cost"])
+		sites.remove_at(pending)
+		_clamp_player(player)
+		return ""
 	var type := int(building_at[cell])
 	if type == Balance.Building.NONE:
 		return "nothing_to_demolish"
@@ -541,6 +608,9 @@ func tick() -> void:
 	_advance_ships()
 	_accrue_income()
 	tick_count += 1
+	# Work is finished after the tick the clock has just moved to, so that ordering a
+	# nine second building and waiting nine seconds gets you a building.
+	_advance_sites()
 	_check_end()
 
 func _advance_ships() -> void:
@@ -575,7 +645,9 @@ func _take_cell(player: int, cell: int) -> void:
 	var previous := int(owner_of[cell])
 	if building_at[cell] == Balance.Building.PORT:
 		_drop_ships_from_port(cell)
-	# Whatever stood there is levelled; the attacker gets bare ground.
+	# Whatever stood there is levelled, and any work in progress is abandoned; the
+	# attacker gets bare ground.
+	_drop_site(cell)
 	_forget(cell)
 	building_at[cell] = Balance.Building.NONE
 	level_at[cell] = 0
@@ -629,6 +701,9 @@ func snapshot() -> Dictionary:
 	var ship_copy: Array[Dictionary] = []
 	for ship in ships:
 		ship_copy.append(ship.duplicate(true))
+	var site_copy: Array[Dictionary] = []
+	for site in sites:
+		site_copy.append(site.duplicate(true))
 	return {
 		"settings": settings.to_dict() if settings != null else {},
 		"seed": map_seed,
@@ -641,6 +716,7 @@ func snapshot() -> Dictionary:
 		"alive": alive.duplicate(),
 		"capture_ready": capture_ready.duplicate(),
 		"ships": ship_copy,
+		"sites": site_copy,
 		"tick": tick_count,
 		"finished": finished,
 		"winner": winner,
@@ -663,6 +739,9 @@ static func from_snapshot(data: Dictionary) -> GameState:
 	s.ships = []
 	for ship in data["ships"]:
 		s.ships.append((ship as Dictionary).duplicate(true))
+	s.sites = []
+	for site in data.get("sites", []):
+		s.sites.append((site as Dictionary).duplicate(true))
 	s.tick_count = int(data["tick"])
 	s.finished = bool(data["finished"])
 	s.winner = int(data["winner"])
@@ -687,6 +766,10 @@ func state_hash() -> int:
 		h = _hash_int(h, power[p])
 		h = _hash_int(h, alive[p])
 		h = _hash_int(h, capture_ready[p])
+	for site in sites:
+		h = _hash_int(h, int(site["cell"]))
+		h = _hash_int(h, int(site["type"]))
+		h = _hash_int(h, int(site["ready"]))
 	for ship in ships:
 		h = _hash_int(h, int(ship["owner"]))
 		h = _hash_int(h, int(ship["port"]))

@@ -83,6 +83,7 @@ func _draw() -> void:
 
 	_draw_territory(view)
 	_draw_buildings(view)
+	_draw_sites(view)
 	_draw_ships()
 
 	if attack_mode:
@@ -156,6 +157,27 @@ func _idle_cells() -> Dictionary:
 		for cell in state.aggregate(player)["idle_cells"]:
 			found[int(cell)] = true
 	return found
+
+# Work in progress: the building it will be, sketched faintly, with a bar filling along
+# the bottom of the cell. Drawn from the sites list, which is short, so the visible
+# window is only used to skip what is off screen.
+func _draw_sites(view: Rect2i) -> void:
+	for site in state.sites:
+		var cell := int(site["cell"])
+		var x := cell % state.width
+		var y := cell / state.width
+		if x < view.position.x or x >= view.end.x or y < view.position.y or y >= view.end.y:
+			continue
+		var pen := Ink.pen_of(int(site["owner"]))
+		var r := cell_rect(cell)
+		Ink.draw_building(self, int(site["type"]), r.grow(-CELL * 0.22),
+			Color(pen.r, pen.g, pen.b, 0.30), 2.0)
+		var progress := float(state.site_progress(cell)) / 1000.0
+		var bar := Rect2(r.position + Vector2(CELL * 0.12, CELL * 0.82),
+			Vector2(CELL * 0.76, CELL * 0.08))
+		draw_rect(bar, Color(pen.r, pen.g, pen.b, 0.18), true)
+		draw_rect(Rect2(bar.position, Vector2(bar.size.x * progress, bar.size.y)), pen, true)
+		Ink.rect(self, bar, Color(pen.r, pen.g, pen.b, 0.55), 1.5)
 
 func _draw_ships() -> void:
 	for ship in state.ships:

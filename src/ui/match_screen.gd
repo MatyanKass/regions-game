@@ -40,6 +40,10 @@ var _overlay: PanelContainer
 var _overlay_text: Label
 var _overlay_details: Label
 var _overlay_actions: HBoxContainer
+var _settings: SettingsPanel
+# One looping player per building site, placed where the site is, so the sound of
+# work comes from the part of the map being worked on.
+var _site_sounds: Dictionary = {}
 
 var _mode: int = Mode.BUILD
 var _ship_port := -1
@@ -129,9 +133,9 @@ func _build_top_bar() -> void:
 	row.add_child(_clock)
 
 	var menu_button := Button.new()
-	menu_button.text = I18n.t("leave")
+	menu_button.text = I18n.t("menu")
 	UiKit.button(menu_button)
-	menu_button.pressed.connect(func(): emit_signal("exit_requested"))
+	menu_button.pressed.connect(_open_pause)
 	row.add_child(menu_button)
 
 # The three action modes. A tap on the map always means whatever is selected here, which
@@ -251,6 +255,39 @@ func _build_panels() -> void:
 	_overlay_actions.add_theme_constant_override("separation", 10)
 	overlay_box.add_child(_overlay_actions)
 
+	_settings = SettingsPanel.new()
+	_centre(_settings)
+	_settings.closed.connect(func():
+		_settings.visible = false
+		_open_pause())
+	_hud.add_child(_settings)
+
+# The pause menu. Only the host can stop the clock - a client asking the world to hold
+# still would be asking the other phone to wait - so for a joiner this is a menu over a
+# running match, which is the honest thing rather than a lie about being paused.
+func _open_pause() -> void:
+	_build_menu.visible = false
+	_cell_menu.visible = false
+	_settings.visible = false
+	if Net.is_host and not Net.state.finished:
+		Net.set_paused(true)
+	_overlay_text.text = I18n.t("paused") if Net.paused else I18n.t("menu")
+	_overlay_details.visible = false
+	_clear_overlay_actions()
+	_add_overlay_action(I18n.t("resume"), _close_pause)
+	_add_overlay_action(I18n.t("settings"), _show_settings)
+	_add_overlay_action(I18n.t("leave"), func(): emit_signal("exit_requested"))
+	_overlay.visible = true
+
+func _show_settings() -> void:
+	_overlay.visible = false
+	_settings.visible = true
+
+func _close_pause() -> void:
+	_overlay.visible = false
+	if Net.is_host and Net.paused:
+		Net.set_paused(false)
+
 static func _centre(node: Control) -> void:
 	node.set_anchors_preset(Control.PRESET_CENTER)
 	node.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -347,7 +384,39 @@ func _on_refused(text: String) -> void:
 	Sfx.play("denied")
 	_show_toast(text)
 
+# One looping sound per site, born and buried with the work itself. Building takes
+# seconds now, so the feedback for it is a sound that lasts as long as the work does and
+# comes from where the work is, rather than a blip at the moment of paying.
+func _sync_site_sounds() -> void:
+	var wanted: Dictionary = {}
+	for site in Net.state.sites:
+		if int(site["owner"]) == Net.local_player:
+			wanted[int(site["cell"])] = true
+	for cell in _site_sounds.keys():
+		if not wanted.has(cell):
+			(_site_sounds[cell] as Node).queue_free()
+			_site_sounds.erase(cell)
+	for cell in wanted:
+		if _site_sounds.has(cell):
+			continue
+		var stream: AudioStream = Sfx.stream_for("build")
+		if stream == null:
+			return
+		var player := AudioStreamPlayer2D.new()
+		player.stream = stream
+		player.bus = Prefs.SFX_BUS
+		player.position = map_view.cell_rect(int(cell)).get_center()
+		player.max_distance = MapView.CELL * 26.0
+		# The sound is shorter than the work, so it starts again until the work is done.
+		player.finished.connect(func():
+			if is_instance_valid(player) and player.is_inside_tree():
+				player.play())
+		add_child(player)
+		player.play()
+		_site_sounds[cell] = player
+
 func _on_advanced() -> void:
+	_sync_site_sounds()
 	map_view.state = Net.state
 	map_view.queue_redraw()
 	_refresh_stats()
@@ -355,12 +424,16 @@ func _on_advanced() -> void:
 	if _build_menu.visible and map_view.selected >= 0:
 		_build_menu.refresh(Net.state, Net.local_player, map_view.selected)
 	if _cell_menu.visible and map_view.selected >= 0:
-		# The building can be taken or destroyed while its menu is open.
-		if int(Net.state.building_at[map_view.selected]) == Balance.Building.NONE \
-				or int(Net.state.owner_of[map_view.selected]) != Net.local_player:
+		# The building can be finished, taken or destroyed while its menu is open.
+		var cell := map_view.selected
+		if int(Net.state.owner_of[cell]) != Net.local_player:
+			_cell_menu.visible = false
+		elif Net.state.site_index(cell) >= 0:
+			_cell_menu.show_site(Net.state, Net.local_player, cell)
+		elif int(Net.state.building_at[cell]) == Balance.Building.NONE:
 			_cell_menu.visible = false
 		else:
-			_cell_menu.show_cell(Net.state, Net.local_player, map_view.selected)
+			_cell_menu.show_cell(Net.state, Net.local_player, cell)
 
 # Cheap enough to run every tick: both figures are running totals, not counts.
 func _watch_for_losses() -> void:
@@ -525,6 +598,11 @@ func _on_tap(screen_pos: Vector2) -> void:
 func _tap_build(st: GameState, cell: int) -> void:
 	if int(st.owner_of[cell]) != Net.local_player:
 		_show_toast(I18n.reason("not_your_cell"))
+		return
+	if st.site_index(cell) >= 0:
+		_build_menu.visible = false
+		_cell_menu.show_site(st, Net.local_player, cell)
+		_cell_menu.visible = true
 		return
 	if int(st.building_at[cell]) == Balance.Building.NONE:
 		_cell_menu.visible = false

@@ -69,7 +69,28 @@ func _init() -> void:
 	_demolish.pressed.connect(func(): emit_signal("demolish_requested"))
 	actions.add_child(_demolish)
 
+# A cell that is being worked on rather than built up: what is coming, how far along it
+# is, and the one thing that can be done about it.
+func show_site(state: GameState, player: int, cell: int) -> void:
+	var at := state.site_index(cell)
+	if at < 0:
+		return
+	var site: Dictionary = state.sites[at]
+	var type := int(site["type"])
+	var left := maxi(0, int(site["ready"]) - state.tick_count) / Balance.TICKS_PER_SECOND
+	_icon.building_type = type
+	_icon.queue_redraw()
+	_title.text = I18n.building_name(type)
+	_detail.text = "%s — %d%%, %s %d %s" % [I18n.t("under_construction"),
+		state.site_progress(cell) / 10, I18n.t("ready_in"), left + 1, I18n.t("second")]
+	_idle_note.visible = false
+	_ship.visible = false
+	_upgrade.visible = false
+	_demolish.visible = true
+	_demolish.text = I18n.t("cancel_work")
+
 func show_cell(state: GameState, player: int, cell: int) -> void:
+	_upgrade.visible = true
 	var type := int(state.building_at[cell])
 	if type == Balance.Building.NONE:
 		return

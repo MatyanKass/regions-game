@@ -23,7 +23,14 @@ Design notes (Russian): [Notes/Игра Regions.md](Notes/Игра%20Regions.md)
 | M8 — staffing: a factory with nobody in it earns nothing | done |
 | M9 — land pays, so holding ground is worth something | done |
 | M10 — world settings, free play, worlds up to 1000 across | done |
+| M11 — construction takes time, pause menu, settings | done |
 | M5 — practice match against a bot, three difficulties | done |
+
+Buildings take five to fifteen seconds to go up, depending on what they are. A building
+site holds the cell, gives nothing, and shows a bar filling; calling the work off returns
+every coin, since nothing was built. The sound of work loops from where the site is,
+through an `AudioStreamPlayer2D`, so it comes from that part of the map rather than from
+the middle of the screen.
 
 Sound effects are synthesised in code at startup rather than shipped as files, so
 retuning one is editing a number. Music is picked at random from

@@ -159,12 +159,12 @@ func _card_contents() -> Control:
 
 	var footer := HBoxContainer.new()
 	footer.alignment = BoxContainer.ALIGNMENT_END
-	var language := Button.new()
-	language.text = I18n.t("language")
-	language.custom_minimum_size = Vector2(120, 34)
-	UiKit.button(language)
-	language.pressed.connect(_on_language)
-	footer.add_child(language)
+	var settings := Button.new()
+	settings.text = I18n.t("settings")
+	settings.custom_minimum_size = Vector2(150, 34)
+	UiKit.button(settings)
+	settings.pressed.connect(_open_settings)
+	footer.add_child(settings)
 	box.add_child(footer)
 	return box
 
@@ -306,6 +306,24 @@ func _refresh_rooms() -> void:
 		UiKit.button(button, Ink.PENS[0])
 		button.pressed.connect(func(): _join(str(ip)))
 		_rooms_box.add_child(button)
+
+func _open_settings() -> void:
+	var panel := SettingsPanel.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	panel.closed.connect(func():
+		panel.queue_free()
+		# The language may have changed, and every label on this screen was built with
+		# the old one.
+		_rebuild())
+	add_child(panel)
+
+func _rebuild() -> void:
+	var parent := get_parent()
+	var replacement := LobbyScreen.new()
+	parent.add_child(replacement)
+	queue_free()
 
 func _on_language() -> void:
 	I18n.toggle()

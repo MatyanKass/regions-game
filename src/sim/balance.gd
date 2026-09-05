@@ -72,9 +72,12 @@ enum Building { NONE, FACTORY, HOUSE, BANK, BARRACKS, MILITARY_BASE, PORT, BARRI
 # coin_cap / power_cap    - added storage limit, per level
 # coastal                 - may only be built on a cell orthogonally touching sea
 # max_level               - how far it can be upgraded
+# build_seconds           - how long it takes to go up; nothing it gives counts until
+#                           then, and the cell is a building site in the meantime
 const BUILDINGS := {
 	Building.FACTORY: {
 		"name": "factory",
+		"build_seconds": 9,
 		"coin_cost": 40 * UNIT, "power_cost": 0,
 		"workers": 1, "people": 0,
 		"coin_per_tick": 10, "power_per_tick": 0,
@@ -83,6 +86,7 @@ const BUILDINGS := {
 	},
 	Building.HOUSE: {
 		"name": "house",
+		"build_seconds": 5,
 		"coin_cost": 30 * UNIT, "power_cost": 0,
 		"workers": 0, "people": 2,
 		"coin_per_tick": 0, "power_per_tick": 0,
@@ -91,6 +95,7 @@ const BUILDINGS := {
 	},
 	Building.BANK: {
 		"name": "bank",
+		"build_seconds": 13,
 		"coin_cost": 80 * UNIT, "power_cost": 0,
 		"workers": 0, "people": 0,
 		"coin_per_tick": 0, "power_per_tick": 0,
@@ -99,6 +104,7 @@ const BUILDINGS := {
 	},
 	Building.BARRACKS: {
 		"name": "barracks",
+		"build_seconds": 8,
 		"coin_cost": 40 * UNIT, "power_cost": 25 * UNIT,
 		"workers": 0, "people": 0,
 		"coin_per_tick": 0, "power_per_tick": 0,
@@ -107,6 +113,7 @@ const BUILDINGS := {
 	},
 	Building.MILITARY_BASE: {
 		"name": "military_base",
+		"build_seconds": 12,
 		"coin_cost": 60 * UNIT, "power_cost": 15 * UNIT,
 		"workers": 0, "people": 0,
 		"coin_per_tick": 0, "power_per_tick": 50,
@@ -115,6 +122,7 @@ const BUILDINGS := {
 	},
 	Building.PORT: {
 		"name": "port",
+		"build_seconds": 15,
 		"coin_cost": 60 * UNIT, "power_cost": 30 * UNIT,
 		"workers": 0, "people": 0,
 		"coin_per_tick": 0, "power_per_tick": 0,
@@ -125,6 +133,7 @@ const BUILDINGS := {
 	# cannot take the next one for four seconds. One level only: a wall is a wall.
 	Building.BARRIER: {
 		"name": "barrier",
+		"build_seconds": 6,
 		"coin_cost": 50 * UNIT, "power_cost": 20 * UNIT,
 		"workers": 0, "people": 0,
 		"coin_per_tick": 0, "power_per_tick": 0,
@@ -145,6 +154,9 @@ static func upgrade_power_cost(type: int, to_level: int) -> int:
 # Everything sunk into a building from level 1 up to its current level.
 static func invested_coins(type: int, level: int) -> int:
 	return int(BUILDINGS[type]["coin_cost"]) * level * (level + 1) / 2
+
+static func build_ticks(type: int) -> int:
+	return int(BUILDINGS[type]["build_seconds"]) * TICKS_PER_SECOND
 
 static func max_level_of(type: int) -> int:
 	return int(BUILDINGS[type]["max_level"])

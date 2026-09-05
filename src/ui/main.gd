@@ -7,6 +7,8 @@ var _shot_countdown := 45
 var _shot_attack := false
 var _shot_lobby := false
 var _shot_end := false
+var _shot_pause := false
+var _shot_settings := false
 var _icon_dir := ""
 
 func _ready() -> void:
@@ -25,6 +27,11 @@ func _ready() -> void:
 			_shot_lobby = true
 		if arg == "--shot-end":
 			_shot_end = true
+		if arg == "--shot-pause":
+			_shot_pause = true
+		if arg == "--shot-settings":
+			_shot_pause = true
+			_shot_settings = true
 		if arg.begins_with("--icons="):
 			_icon_dir = arg.substr(8)
 	if not _icon_dir.is_empty():
@@ -115,6 +122,12 @@ func _stock_preview() -> void:
 				st.set_cell(cell, 0)
 	# Filled to the brim, so the preview also shows what an overflowing purse looks like.
 	st.coins[0] = int(st.aggregate(0)["coin_cap"])
+	# And a couple of buildings actually going up, since that is the new thing to see.
+	# A bank rather than a port: a port needs a coast and the preview cannot count on one.
+	for cell in [home + 2, home + st.width + 1]:
+		if cell < st.owner_of.size() and int(st.owner_of[cell]) == 0 				and int(st.building_at[cell]) == Balance.Building.NONE:
+			st.apply_command(0, GameState.make_command(GameState.Command.BUILD, cell,
+				Balance.Building.BANK))
 	st.power[0] = 45 * Balance.UNIT
 	# For the result screenshot: knock the other side out and let the next tick notice.
 	if _shot_end:
@@ -152,6 +165,10 @@ func _process(_delta: float) -> void:
 	_shot_countdown -= 1
 	if _shot_countdown == 30 and _shot_attack and _screen is MatchScreen:
 		(_screen as MatchScreen).set_mode(MatchScreen.Mode.ATTACK)
+	if _shot_countdown == 30 and _shot_pause and _screen is MatchScreen:
+		(_screen as MatchScreen)._open_pause()
+	if _shot_countdown == 25 and _shot_settings and _screen is MatchScreen:
+		(_screen as MatchScreen)._show_settings()
 	if not _shot_attack and not _shot_lobby \
 			and (_shot_countdown == 25 or _shot_countdown == 23):
 		var touch := InputEventScreenTouch.new()

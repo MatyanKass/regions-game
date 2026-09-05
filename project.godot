@@ -23,6 +23,9 @@ Music="*res://src/ui/music.gd"
 ; Sound effects, synthesised at startup rather than loaded from files.
 Sfx="*res://src/ui/sfx.gd"
 
+; Volumes and language, saved between runs.
+Prefs="*res://src/ui/prefs.gd"
+
 [display]
 
 window/size/viewport_width=1280

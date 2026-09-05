@@ -103,6 +103,11 @@ func take_turn(state: GameState) -> Array[Dictionary]:
 		coins -= int(d["coin_cost"])
 		power -= int(d["power_cost"])
 		out.append(build)
+	# Save for one thing at a time. With buildings taking seconds to go up, holding power
+	# back for the next one while the last is still being built means standing still for
+	# most of the match - which is exactly what a bot that saved through the delay did.
+	if _has_work_in_progress(state):
+		_power_reserve = 0
 	# Never hold back so much that expansion stops altogether: the whole point of the
 	# saving is to capture faster afterwards.
 	_power_reserve = clampi(_power_reserve, 0,
@@ -114,6 +119,12 @@ func take_turn(state: GameState) -> Array[Dictionary]:
 	if not out.is_empty():
 		focus_cell = int(out[out.size() - 1]["a"])
 	return out
+
+func _has_work_in_progress(state: GameState) -> bool:
+	for site in state.sites:
+		if int(site["owner"]) == player:
+			return true
+	return false
 
 # --- Building ---------------------------------------------------------------------
 
@@ -199,6 +210,14 @@ func _building_counts(state: GameState) -> Dictionary:
 		var b := int(state.building_at[i])
 		if counts.has(b):
 			counts[b] = int(counts[b]) + 1
+	# Work in progress counts too: a bot that ignored it would order a second military
+	# base while the first one was still going up.
+	for site in state.sites:
+		if int(site["owner"]) != player:
+			continue
+		var type := int(site["type"])
+		if counts.has(type):
+			counts[type] = int(counts[type]) + 1
 	return counts
 
 # Mirrors the simulation's own conditions. Being wrong here only costs a refused command,
@@ -225,6 +244,8 @@ func _place_for(state: GameState, type: int) -> int:
 			continue
 		if int(state.building_at[i]) != Balance.Building.NONE or not state.is_land(i):
 			continue
+		if state.site_index(i) >= 0:
+			continue
 		if coastal and not state.touches_sea(i):
 			continue
 		# The last piece of coast belongs to the port that is not built yet.
@@ -241,7 +262,7 @@ func _free_coastal_cells(state: GameState) -> int:
 	for i in range(state.owner_of.size()):
 		if int(state.owner_of[i]) != player or not state.is_land(i):
 			continue
-		if int(state.building_at[i]) == Balance.Building.NONE and state.touches_sea(i):
+		if int(state.building_at[i]) == Balance.Building.NONE and state.touches_sea(i) 				and state.site_index(i) < 0:
 			count += 1
 	return count
 
