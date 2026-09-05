@@ -6,9 +6,15 @@
 # Everything is a sweep between two pitches with a decay envelope, in one of three
 # voices. That is a narrow palette on purpose - it makes the whole set sound like it
 # belongs to one game.
+#
+# A real recording always wins: drop "build.ogg" into assets/sfx and it replaces the
+# synthesised build sound at startup, with no code change. The generated set is the
+# floor, not the ceiling - see assets/sfx/README.md for the names.
 extends Node
 
 const RATE := 22050
+const OVERRIDE_DIR := "res://assets/sfx"
+const OVERRIDE_TYPES := [".ogg", ".wav", ".mp3"]
 const VOICES := 8            # how many effects may overlap
 const MASTER_DB := -7.0
 
@@ -72,12 +78,33 @@ var _rng := SimRng.new(20260905)
 
 func _ready() -> void:
 	for name in RECIPES:
-		_sounds[name] = _render(RECIPES[name])
+		var supplied := _load_override(str(name))
+		_sounds[name] = supplied if supplied != null else _render(RECIPES[name])
 	for i in range(VOICES):
 		var player := AudioStreamPlayer.new()
 		player.volume_db = MASTER_DB
 		add_child(player)
 		_players.append(player)
+
+# A hand-made file for this effect, if somebody has put one there. Returns null when
+# there is nothing to load, which is the normal case and means "use the synthesiser".
+func load_override(name: String) -> AudioStream:
+	return _load_override(name)
+
+func _load_override(name: String) -> AudioStream:
+	var dir := DirAccess.open(OVERRIDE_DIR)
+	if dir == null:
+		return null
+	# The project folder lists both "build.ogg" and "build.ogg.import"; the exported one
+	# lists only the first. Stripping the sidecar suffix covers both.
+	for file in dir.get_files():
+		var clean := file.trim_suffix(".import")
+		for suffix in OVERRIDE_TYPES:
+			if clean == name + suffix:
+				var stream = load(OVERRIDE_DIR + "/" + clean)
+				if stream is AudioStream:
+					return stream
+	return null
 
 func play(name: String) -> void:
 	if not _sounds.has(name):

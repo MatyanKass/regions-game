@@ -37,6 +37,20 @@ func test_every_effect_renders_to_real_audio() -> void:
 			"%s is silence with a blip in it" % name)
 	sfx.free()
 
+func test_a_supplied_file_would_replace_the_generated_one() -> void:
+	var sfx = load("res://src/ui/sfx.gd").new()
+	# Nothing is supplied yet, so every effect must fall back to the synthesiser rather
+	# than to silence. The point of the test is that the lookup runs at all: a typo in
+	# the folder name would go unnoticed until someone dropped a file in and it did
+	# nothing.
+	for name in sfx.RECIPES:
+		var supplied = sfx.load_override(str(name))
+		expect(supplied == null or supplied is AudioStream,
+			"%s must resolve to a real stream or to nothing" % name)
+	expect(sfx.load_override("no_such_effect") == null,
+		"an effect nobody has supplied a file for resolves to nothing")
+	sfx.free()
+
 func test_effects_are_short_enough_to_spam() -> void:
 	var sfx = load("res://src/ui/sfx.gd").new()
 	# Capture fires as fast as the cooldown allows, so its sound must fit inside the
