@@ -6,6 +6,7 @@ var _screenshot_path := ""
 var _shot_countdown := 45
 var _shot_attack := false
 var _shot_lobby := false
+var _shot_end := false
 var _icon_dir := ""
 
 func _ready() -> void:
@@ -22,6 +23,8 @@ func _ready() -> void:
 			_shot_attack = true
 		if arg == "--shot-lobby":
 			_shot_lobby = true
+		if arg == "--shot-end":
+			_shot_end = true
 		if arg.begins_with("--icons="):
 			_icon_dir = arg.substr(8)
 	if not _icon_dir.is_empty():
@@ -109,8 +112,12 @@ func _stock_preview() -> void:
 			if placed < plan.size():
 				st.building_at[cell] = plan[placed]
 				placed += 1
-	st.coins[0] = 90 * Balance.UNIT
+	# Filled to the brim, so the preview also shows what an overflowing purse looks like.
+	st.coins[0] = int(st.aggregate(0)["coin_cap"])
 	st.power[0] = 45 * Balance.UNIT
+	# For the result screenshot: knock the other side out and let the next tick notice.
+	if _shot_end:
+		st.alive[1] = 0
 
 # Headless self-play for tools/run_net_test.ps1. Never reached in a normal run.
 func _start_autoplay(joining: bool) -> void:

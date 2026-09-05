@@ -36,6 +36,7 @@ var _build_menu: BuildMenu
 var _cell_menu: CellMenu
 var _overlay: PanelContainer
 var _overlay_text: Label
+var _overlay_details: Label
 var _overlay_actions: HBoxContainer
 
 var _mode: int = Mode.BUILD
@@ -234,9 +235,13 @@ func _build_panels() -> void:
 	var overlay_box := VBoxContainer.new()
 	overlay_box.add_theme_constant_override("separation", 14)
 	_overlay.add_child(overlay_box)
-	_overlay_text = UiKit.heading("", 24)
+	_overlay_text = UiKit.heading("", 26)
 	_overlay_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	overlay_box.add_child(_overlay_text)
+	_overlay_details = UiKit.body("", 14, Ink.INK_SOFT)
+	_overlay_details.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_overlay_details.visible = false
+	overlay_box.add_child(_overlay_details)
 	_overlay_actions = HBoxContainer.new()
 	_overlay_actions.alignment = BoxContainer.ALIGNMENT_CENTER
 	_overlay_actions.add_theme_constant_override("separation", 10)
@@ -368,12 +373,10 @@ func _refresh_stats() -> void:
 	var me := Net.local_player
 	var agg := st.aggregate(me)
 	var per_second := float(Balance.TICKS_PER_SECOND) / float(Balance.UNIT)
-	(_chips["coins"] as UiKit.Chip).set_values(
-		"%d/%d" % [int(st.coins[me]) / Balance.UNIT, int(agg["coin_cap"]) / Balance.UNIT],
-		"+%.1f/%s" % [float(agg["coin_per_tick"]) * per_second, I18n.t("second")])
-	(_chips["power"] as UiKit.Chip).set_values(
-		"%d/%d" % [int(st.power[me]) / Balance.UNIT, int(agg["power_cap"]) / Balance.UNIT],
-		"+%.1f/%s" % [float(agg["power_per_tick"]) * per_second, I18n.t("second")])
+	_set_resource(_chips["coins"], int(st.coins[me]), int(agg["coin_cap"]),
+		int(agg["coin_per_tick"]) , per_second)
+	_set_resource(_chips["power"], int(st.power[me]), int(agg["power_cap"]),
+		int(agg["power_per_tick"]), per_second)
 	var idle := int((agg["idle_cells"] as PackedInt32Array).size())
 	(_chips["people"] as UiKit.Chip).set_values(
 		"%d/%d" % [int(agg["free_people"]), int(agg["people"])],
@@ -383,6 +386,18 @@ func _refresh_stats() -> void:
 	# figure turns the warning colour rather than sitting quietly in grey.
 	(_chips["people"] as UiKit.Chip).rate_label.add_theme_color_override("font_color",
 		Ink.ALERT if idle > 0 else Ink.INK_SOFT)
+
+# A resource sitting at its ceiling is income being thrown away every second, and
+# nothing on screen used to say so - the number simply stopped moving. Now the rate
+# turns red and reports what is being lost rather than what is being earned.
+func _set_resource(chip: UiKit.Chip, value: int, cap: int, per_tick: int,
+		per_second: float) -> void:
+	var full := value >= cap and per_tick > 0
+	chip.set_values("%d/%d" % [value / Balance.UNIT, cap / Balance.UNIT],
+		"%s %.1f/%s" % [I18n.t("overflowing"), float(per_tick) * per_second, I18n.t("second")]
+			if full else "+%.1f/%s" % [float(per_tick) * per_second, I18n.t("second")])
+	chip.rate_label.add_theme_color_override("font_color",
+		Ink.ALERT if full else Ink.INK_SOFT)
 
 func _update_clock() -> void:
 	var left := maxi(0, Balance.MATCH_LIMIT_TICKS - Net.state.tick_count) / Balance.TICKS_PER_SECOND
@@ -590,13 +605,43 @@ func _on_finished() -> void:
 	elif st.winner >= 0:
 		text = I18n.t("defeat")
 	_overlay_text.text = text
+	_overlay_details.text = _result_summary(st)
+	_overlay_details.visible = true
 	Sfx.play("victory" if st.winner == Net.local_player else "defeat")
+	# Nothing below the map applies once the match is over.
+	_hint.visible = false
+	_cooldown_bar.visible = false
+	_cooldown_label.visible = false
 	_clear_overlay_actions()
 	_add_overlay_action(I18n.t("back_to_menu"), func(): emit_signal("exit_requested"))
 	_overlay.visible = true
 
+# How it ended and what the two sides finished with, so the result is a scoreline rather
+# than a single word.
+func _result_summary(st: GameState) -> String:
+	var mine := st.aggregate(Net.local_player)
+	var theirs := st.aggregate(Net.opponent_index())
+	var seconds := st.tick_count / Balance.TICKS_PER_SECOND
+	var reason := I18n.t("ended_time") if st.tick_count >= Balance.MATCH_LIMIT_TICKS \
+		else I18n.t("ended_eliminated")
+	return "%s\n\n%s: %d — %d\n%s: %d — %d\n%s %d:%02d" % [
+		reason,
+		I18n.t("cells"), int(mine["cells"]), int(theirs["cells"]),
+		I18n.t("buildings"), _count_buildings(st, Net.local_player),
+		_count_buildings(st, Net.opponent_index()),
+		I18n.t("played"), seconds / 60, seconds % 60,
+	]
+
+func _count_buildings(st: GameState, player: int) -> int:
+	var total := 0
+	for i in range(st.building_at.size()):
+		if int(st.owner_of[i]) == player and int(st.building_at[i]) != Balance.Building.NONE:
+			total += 1
+	return total
+
 func _on_opponent_disconnected() -> void:
 	_overlay_text.text = I18n.t("opponent_lost") % _opponent_name()
+	_overlay_details.visible = false
 	_clear_overlay_actions()
 	_add_overlay_action(I18n.t("keep_waiting"), func(): _overlay.visible = false)
 	_add_overlay_action(I18n.t("end_match"), func(): emit_signal("exit_requested"))
@@ -604,6 +649,7 @@ func _on_opponent_disconnected() -> void:
 
 func _on_connection_lost(reason: String) -> void:
 	_overlay_text.text = reason
+	_overlay_details.visible = false
 	_clear_overlay_actions()
 	_add_overlay_action(I18n.t("back_to_menu"), func(): emit_signal("exit_requested"))
 	_overlay.visible = true
@@ -616,6 +662,7 @@ func _on_pause_changed(is_paused: bool) -> void:
 	if _overlay.visible:
 		return
 	_overlay_text.text = I18n.t("paused")
+	_overlay_details.visible = false
 	_clear_overlay_actions()
 	if Net.is_host:
 		_add_overlay_action(I18n.t("resume"), func(): Net.set_paused(false))
