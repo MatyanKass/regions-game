@@ -58,7 +58,7 @@ func test_start_cells_are_land_and_apart() -> void:
 func test_base_income_and_cap() -> void:
 	var s := GameState.create(7)
 	expect_eq(s.coins[0], 0, "match starts with no coins")
-	for i in range(10):
+	for i in range(Balance.TICKS_PER_SECOND):
 		s.tick()
 	expect_eq(s.coins[0], 1 * Balance.UNIT, "one second of base income is one coin")
 	expect_eq(s.power[0], 1 * Balance.UNIT, "one second of base income is one power")
@@ -248,6 +248,117 @@ func test_reachable_shores_matches_what_is_allowed() -> void:
 	for cell in shores:
 		expect(not s.sea_path(port_cell, cell).is_empty(),
 			"every highlighted shore must really have a route")
+
+# --- Cooldowns, levels and the barrier ---
+
+func test_capture_has_a_cooldown() -> void:
+	var s := GameState.create(7)
+	var home := _home_of(s, 0)
+	s.power[0] = 50 * Balance.UNIT
+	var first := _land_neighbour(s, home)
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, first)), "",
+		"the first capture goes through")
+	var second := _first_capturable(s, 0)
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, second)),
+		"on_cooldown", "a second capture in the same tick is refused")
+	expect_eq(s.capture_cooldown_left(0), Balance.CAPTURE_COOLDOWN_TICKS,
+		"open ground reloads in a quarter of a second")
+	for i in range(Balance.CAPTURE_COOLDOWN_TICKS):
+		s.tick()
+	expect_eq(s.capture_cooldown_left(0), 0, "the cooldown runs out")
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, second)), "",
+		"and then the next cell can be taken")
+
+func test_enemy_cells_reload_slower_than_open_ground() -> void:
+	var s := GameState.create(7)
+	var victim := _home_of(s, 1)
+	_grant_cell(s, 1, victim)
+	_grant_cell(s, 0, victim)
+	s.power[0] = 50 * Balance.UNIT
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, victim)), "",
+		"an enemy cell can be taken")
+	expect_eq(s.capture_cooldown_left(0), Balance.CAPTURE_ENEMY_COOLDOWN_TICKS,
+		"taking a defended cell costs more time than taking open ground")
+	expect(Balance.CAPTURE_ENEMY_COOLDOWN_TICKS > Balance.CAPTURE_COOLDOWN_TICKS,
+		"the two cooldowns must actually differ")
+
+func test_barrier_stalls_the_attacker() -> void:
+	var s := GameState.create(7)
+	var victim_home := _home_of(s, 1)
+	var wall := _grant_cell(s, 1, victim_home)
+	s.coins[1] = 300 * Balance.UNIT
+	s.power[1] = 100 * Balance.UNIT
+	expect_eq(s.apply_command(1, GameState.make_command(GameState.Command.BUILD, wall,
+		Balance.Building.BARRIER)), "", "a barrier should be buildable")
+	_grant_cell(s, 0, wall)
+	s.power[0] = 50 * Balance.UNIT
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, wall)), "",
+		"a barrier does not stop the cell being taken")
+	expect_eq(s.capture_cooldown_left(0), Balance.BARRIER_COOLDOWN_TICKS,
+		"but the attacker is stalled for four seconds afterwards")
+	expect_eq(int(s.building_at[wall]), Balance.Building.NONE, "the barrier itself is levelled")
+
+func test_upgrade_scales_the_effect_and_the_price() -> void:
+	var s := _state_with_coins(7, 1000 * Balance.UNIT)
+	var home := _home_of(s, 0)
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BANK))
+	expect_eq(int(s.level_at[home]), 1, "a new building starts at level one")
+	var before := int(s.coins[0])
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.UPGRADE, home)), "",
+		"an upgrade should be possible with the coins for it")
+	expect_eq(before - int(s.coins[0]), Balance.upgrade_coin_cost(Balance.Building.BANK, 2),
+		"level two costs twice the base price")
+	expect_eq(int(s.aggregate(0)["coin_cap"]), Balance.BASE_COIN_CAP + 20 * Balance.UNIT,
+		"a level two bank holds twice as much")
+
+func test_upgrades_stop_at_the_ceiling() -> void:
+	var s := _state_with_coins(7, 5000 * Balance.UNIT)
+	var home := _home_of(s, 0)
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE))
+	for i in range(Balance.MAX_LEVEL - 1):
+		expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.UPGRADE, home)), "",
+			"upgrade %d should be allowed" % (i + 2))
+	expect_eq(int(s.level_at[home]), Balance.MAX_LEVEL, "the house reaches the ceiling")
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.UPGRADE, home)),
+		"max_level", "and cannot go past it")
+	expect_eq(int(s.aggregate(0)["people"]), 2 * Balance.MAX_LEVEL,
+		"every level of the house houses another two residents")
+
+func test_a_barrier_cannot_be_upgraded() -> void:
+	var s := _state_with_coins(7, 1000 * Balance.UNIT)
+	s.power[0] = 200 * Balance.UNIT
+	var home := _home_of(s, 0)
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BARRIER))
+	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.UPGRADE, home)),
+		"max_level", "a wall is a wall: one level only")
+
+func test_demolition_refunds_the_upgrades_too() -> void:
+	# Coins have to start inside the storage cap, or the refund would be clamped away
+	# and the test would be measuring the cap rather than the refund.
+	var s := _state_with_coins(7, Balance.BASE_COIN_CAP)
+	var home := _home_of(s, 0)
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE))
+	s.apply_command(0, GameState.make_command(GameState.Command.UPGRADE, home))
+	var before := int(s.coins[0])
+	s.apply_command(0, GameState.make_command(GameState.Command.DEMOLISH, home))
+	# Level two cost 30 + 60 = 90 coins, so half of everything sunk in is 45.
+	expect_eq(int(s.coins[0]) - before,
+		Balance.invested_coins(Balance.Building.HOUSE, 2) * Balance.DEMOLISH_REFUND_PERCENT / 100,
+		"the refund covers what the upgrades cost as well")
+
+func test_levels_and_cooldowns_survive_a_snapshot() -> void:
+	var s := _state_with_coins(7, 1000 * Balance.UNIT)
+	var home := _home_of(s, 0)
+	s.power[0] = 60 * Balance.UNIT
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BANK))
+	s.apply_command(0, GameState.make_command(GameState.Command.UPGRADE, home))
+	s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, _land_neighbour(s, home)))
+	var copy := GameState.from_snapshot(s.snapshot())
+	expect_eq(copy.state_hash(), s.state_hash(),
+		"a snapshot has to carry building levels and the reload clock")
+	expect_eq(int(copy.level_at[home]), 2, "the level came across")
+	expect_eq(copy.capture_cooldown_left(0), s.capture_cooldown_left(0),
+		"so did the cooldown")
 
 # --- Determinism ---
 

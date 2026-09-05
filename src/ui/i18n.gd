@@ -49,6 +49,30 @@ const STRINGS := {
 	"hint_tap": {"ru": "Тап по своей клетке — постройка, двойной тап по соседней — захват",
 		"en": "Tap your cell to build, double-tap a bordering cell to capture"},
 
+	# Action modes: the three buttons along the bottom of the match screen
+	"mode_build": {"ru": "Стройка", "en": "Build"},
+	"mode_attack": {"ru": "Атака", "en": "Attack"},
+	"mode_info": {"ru": "Инфо", "en": "Info"},
+	"hint_build": {"ru": "Тап по своей клетке — построить, по зданию — улучшить или снести",
+		"en": "Tap your cell to build, tap a building to upgrade or demolish"},
+	"hint_attack": {"ru": "Тап по соседней клетке — захват за 10 силы",
+		"en": "Tap a bordering cell to take it for 10 power"},
+	"hint_info": {"ru": "Тап по клетке — кто ей владеет и как идут его дела",
+		"en": "Tap a cell to see who owns it and how they are doing"},
+	"level": {"ru": "Уровень", "en": "Level"},
+	"upgrade_to": {"ru": "Улучшить до", "en": "Upgrade to"},
+	"max_level_reached": {"ru": "Максимальный уровень", "en": "Fully upgraded"},
+	"second": {"ru": "с", "en": "s"},
+	"cap": {"ru": "к лимиту", "en": "storage"},
+	"people": {"ru": "жителей", "en": "residents"},
+	"barrier_stall": {"ru": "с задержки захвата у врага", "en": "s of stalled enemy captures"},
+	"cooldown": {"ru": "Перезарядка", "en": "Cooldown"},
+	"neutral_land": {"ru": "Ничья земля", "en": "Open ground"},
+	"empty_cell": {"ru": "Пусто", "en": "Empty"},
+	"your_cell": {"ru": "Ваша клетка", "en": "Your cell"},
+	"power_rate": {"ru": "Сила", "en": "Power"},
+	"coin_rate": {"ru": "Монеты", "en": "Coins"},
+
 	# Buildings
 	"b_factory": {"ru": "Завод", "en": "Factory"},
 	"b_house": {"ru": "Дом", "en": "House"},
@@ -56,6 +80,7 @@ const STRINGS := {
 	"b_barracks": {"ru": "Казарма", "en": "Barracks"},
 	"b_military_base": {"ru": "Военная база", "en": "Military base"},
 	"b_port": {"ru": "Порт", "en": "Port"},
+	"b_barrier": {"ru": "Барьер", "en": "Barrier"},
 
 	# Refusal reasons produced by the simulation
 	"e_not_enough_coins": {"ru": "Не хватает монет", "en": "Not enough coins"},
@@ -66,12 +91,15 @@ const STRINGS := {
 	"e_not_your_cell": {"ru": "Это не ваша клетка", "en": "That is not your cell"},
 	"e_not_adjacent": {"ru": "Клетка не граничит с вашей", "en": "That cell does not border yours"},
 	"e_sea_cell": {"ru": "На море строить нельзя", "en": "You cannot build on water"},
-	"e_no_sea_route": {"ru": "Нет прямого морского пути", "en": "No straight sea route"},
+	"e_no_sea_route": {"ru": "Нет морского пути", "en": "No sea route"},
 	"e_port_busy": {"ru": "Корабль этого порта уже в пути", "en": "This port already has a ship at sea"},
 	"e_already_yours": {"ru": "Клетка уже ваша", "en": "The cell is already yours"},
 	"e_nothing_to_demolish": {"ru": "Сносить нечего", "en": "Nothing to demolish"},
 	"e_match_finished": {"ru": "Матч окончен", "en": "The match is over"},
 	"e_no_port": {"ru": "Здесь нет порта", "en": "There is no port here"},
+	"e_on_cooldown": {"ru": "Захват ещё перезаряжается", "en": "The capture is still reloading"},
+	"e_max_level": {"ru": "Уже максимальный уровень", "en": "Already fully upgraded"},
+	"e_nothing_to_upgrade": {"ru": "Улучшать нечего", "en": "Nothing to upgrade"},
 }
 
 static func detect_language() -> void:

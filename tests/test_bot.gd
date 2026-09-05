@@ -84,13 +84,13 @@ func _buildings(state: GameState, player: int) -> int:
 func test_bot_only_ever_plays_legal_moves() -> void:
 	var state := GameState.create(4242)
 	var bot := BotPlayer.new(1, BotPlayer.Level.HARD, 4242)
-	var refused := _play(state, [_greedy_brain(0), _bot_brain(bot)], 1200)
+	var refused := _play(state, [_greedy_brain(0), _bot_brain(bot)], 120 * Balance.TICKS_PER_SECOND)
 	expect(refused.is_empty(), "the bot had commands refused: %s" % refused)
 
 func test_bot_develops_instead_of_hoarding() -> void:
 	var state := GameState.create(77)
 	var bot := BotPlayer.new(1, BotPlayer.Level.NORMAL, 77)
-	_play(state, [Callable(), _bot_brain(bot)], 1800)
+	_play(state, [Callable(), _bot_brain(bot)], 180 * Balance.TICKS_PER_SECOND)
 	expect(_cells(state, 1) >= 10, "after three minutes the bot should hold ground, has %d cells" % _cells(state, 1))
 	expect(_buildings(state, 1) >= 3, "the bot should have built something, has %d buildings" % _buildings(state, 1))
 	# Income that hits the ceiling is income thrown away, and a bot with land to build on
@@ -105,7 +105,7 @@ func test_bot_beats_the_greedy_opener() -> void:
 	for seed_value in [11, 909, 30001]:
 		var state := GameState.create(seed_value)
 		var bot := BotPlayer.new(1, BotPlayer.Level.HARD, seed_value)
-		_play(state, [_greedy_brain(0), _bot_brain(bot)], 1800)
+		_play(state, [_greedy_brain(0), _bot_brain(bot)], 180 * Balance.TICKS_PER_SECOND)
 		expect(_cells(state, 1) > _cells(state, 0),
 			"on seed %d the bot took %d cells against greed's %d" % [
 				seed_value, _cells(state, 1), _cells(state, 0)])
@@ -118,7 +118,7 @@ func test_an_easy_bot_is_easier_than_a_hard_one() -> void:
 		var hard := BotPlayer.new(1, BotPlayer.Level.HARD, seed_value)
 		# Long enough for the two of them to actually meet: until the borders touch, both
 		# are only racing the map.
-		_play(state, [_bot_brain(easy), _bot_brain(hard)], 6000)
+		_play(state, [_bot_brain(easy), _bot_brain(hard)], 600 * Balance.TICKS_PER_SECOND)
 		if _cells(state, 1) > _cells(state, 0):
 			beaten += 1
 	expect_eq(beaten, 3, "the hard bot should outgrow the easy one on every seed")
@@ -127,7 +127,7 @@ func test_bot_takes_to_the_water_when_the_land_runs_out() -> void:
 	var state := _island_map()
 	var bot := BotPlayer.new(1, BotPlayer.Level.HARD, 3)
 	var sailed := false
-	for i in range(3000):
+	for i in range(300 * Balance.TICKS_PER_SECOND):
 		for cmd in bot.take_turn(state):
 			state.apply_command(1, cmd)
 		state.tick()

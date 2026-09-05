@@ -9,7 +9,7 @@
 class_name GameState
 extends RefCounted
 
-enum Command { BUILD, DEMOLISH, CAPTURE, LAUNCH_SHIP }
+enum Command { BUILD, DEMOLISH, CAPTURE, LAUNCH_SHIP, UPGRADE }
 
 const NEUTRAL := 255
 
@@ -19,9 +19,13 @@ var height: int
 var terrain: PackedByteArray      # WorldGen.LAND / WorldGen.SEA
 var owner_of: PackedByteArray     # player index, or NEUTRAL
 var building_at: PackedByteArray  # Balance.Building
+var level_at: PackedByteArray     # 1..max_level where a building stands, 0 elsewhere
 var coins: PackedInt64Array
 var power: PackedInt64Array
 var alive: PackedByteArray
+# The tick from which each player may capture again. Attacking is a single tap, so
+# the rate of fire is the only thing keeping it honest.
+var capture_ready: PackedInt64Array
 var ships: Array[Dictionary] = []
 var tick_count: int = 0
 var finished: bool = false
@@ -41,14 +45,19 @@ static func create(seed_value: int, player_count: int = 2) -> GameState:
 	s.building_at = PackedByteArray()
 	s.building_at.resize(total)
 	s.building_at.fill(Balance.Building.NONE)
+	s.level_at = PackedByteArray()
+	s.level_at.resize(total)
+	s.level_at.fill(0)
 	s.coins = PackedInt64Array()
 	s.power = PackedInt64Array()
 	s.alive = PackedByteArray()
+	s.capture_ready = PackedInt64Array()
 	var starts: PackedInt32Array = world["starts"]
 	for p in range(player_count):
 		s.coins.append(Balance.START_COINS)
 		s.power.append(Balance.START_POWER)
 		s.alive.append(1)
+		s.capture_ready.append(0)
 		s.owner_of[starts[p]] = p
 	return s
 
@@ -107,11 +116,14 @@ func aggregate(player: int) -> Dictionary:
 		if b == Balance.Building.NONE:
 			continue
 		var d: Dictionary = Balance.BUILDINGS[b]
-		coin_per_tick += int(d["coin_per_tick"])
-		power_per_tick += int(d["power_per_tick"])
-		coin_cap += int(d["coin_cap"])
-		power_cap += int(d["power_cap"])
-		people += int(d["people"])
+		# An upgrade multiplies what a building produces. The people it employs do not
+		# change, which is what makes upgrading the answer once land runs out.
+		var lvl := maxi(1, int(level_at[i]))
+		coin_per_tick += int(d["coin_per_tick"]) * lvl
+		power_per_tick += int(d["power_per_tick"]) * lvl
+		coin_cap += int(d["coin_cap"]) * lvl
+		power_cap += int(d["power_cap"]) * lvl
+		people += int(d["people"]) * lvl
 		workers += int(d["workers"])
 	# The flat base income is what keeps a one-cell player in the game, so it is tied
 	# to owning territory at all rather than to any building.
@@ -149,6 +161,8 @@ func apply_command(player: int, cmd: Dictionary) -> String:
 			return _do_capture(player, int(cmd["a"]))
 		Command.LAUNCH_SHIP:
 			return _do_launch_ship(player, int(cmd["a"]), int(cmd["b"]))
+		Command.UPGRADE:
+			return _do_upgrade(player, int(cmd["a"]))
 	return "unknown_command"
 
 func _do_build(player: int, cell: int, type: int) -> String:
@@ -174,6 +188,29 @@ func _do_build(player: int, cell: int, type: int) -> String:
 	coins[player] -= int(d["coin_cost"])
 	power[player] -= int(d["power_cost"])
 	building_at[cell] = type
+	level_at[cell] = 1
+	return ""
+
+func _do_upgrade(player: int, cell: int) -> String:
+	if cell < 0 or cell >= owner_of.size():
+		return "bad_cell"
+	if owner_of[cell] != player:
+		return "not_your_cell"
+	var type := int(building_at[cell])
+	if type == Balance.Building.NONE:
+		return "nothing_to_upgrade"
+	var next_level := int(level_at[cell]) + 1
+	if next_level > Balance.max_level_of(type):
+		return "max_level"
+	var coin_cost := Balance.upgrade_coin_cost(type, next_level)
+	var power_cost := Balance.upgrade_power_cost(type, next_level)
+	if coins[player] < coin_cost:
+		return "not_enough_coins"
+	if power[player] < power_cost:
+		return "not_enough_power"
+	coins[player] -= coin_cost
+	power[player] -= power_cost
+	level_at[cell] = next_level
 	return ""
 
 func _do_demolish(player: int, cell: int) -> String:
@@ -184,13 +221,15 @@ func _do_demolish(player: int, cell: int) -> String:
 	var type := int(building_at[cell])
 	if type == Balance.Building.NONE:
 		return "nothing_to_demolish"
-	var d: Dictionary = Balance.BUILDINGS[type]
+	var invested := Balance.invested_coins(type, maxi(1, int(level_at[cell])))
 	building_at[cell] = Balance.Building.NONE
+	level_at[cell] = 0
 	if type == Balance.Building.PORT:
 		_drop_ships_from_port(cell)
-	# Refund is applied after the building is gone, so the new (lower) storage cap
-	# clamps it - demolishing a bank cannot leave a player over the limit.
-	coins[player] += int(d["coin_cost"]) * Balance.DEMOLISH_REFUND_PERCENT / 100
+	# Refund is applied after the building is gone, so the new (lower) storage cap clamps
+	# it - demolishing a bank cannot leave a player over the limit. Upgrades are refunded
+	# on the same terms, so levelling a building never traps coins.
+	coins[player] += invested * Balance.DEMOLISH_REFUND_PERCENT / 100
 	_clamp_player(player)
 	return ""
 
@@ -203,11 +242,27 @@ func _do_capture(player: int, cell: int) -> String:
 		return "already_yours"
 	if not touches_player(cell, player):
 		return "not_adjacent"
+	if tick_count < capture_ready[player]:
+		return "on_cooldown"
 	if power[player] < Balance.CAPTURE_POWER_COST:
 		return "not_enough_power"
+	var defended := int(owner_of[cell]) != NEUTRAL
+	var barrier := int(building_at[cell]) == Balance.Building.BARRIER
 	power[player] -= Balance.CAPTURE_POWER_COST
 	_take_cell(player, cell)
+	var cooldown := Balance.CAPTURE_ENEMY_COOLDOWN_TICKS if defended else Balance.CAPTURE_COOLDOWN_TICKS
+	# The barrier is bought for exactly this: it does not save the cell, it stalls the
+	# advance that was coming through it.
+	if barrier:
+		cooldown = maxi(cooldown, Balance.BARRIER_COOLDOWN_TICKS)
+	capture_ready[player] = tick_count + cooldown
 	return ""
+
+# Ticks the player must still wait before the next capture. Drawn by the interface.
+func capture_cooldown_left(player: int) -> int:
+	if player < 0 or player >= capture_ready.size():
+		return 0
+	return maxi(0, int(capture_ready[player]) - tick_count)
 
 func _do_launch_ship(player: int, port_cell: int, target: int) -> String:
 	if port_cell < 0 or port_cell >= owner_of.size():
@@ -378,6 +433,7 @@ func _take_cell(player: int, cell: int) -> void:
 		_drop_ships_from_port(cell)
 	# Whatever stood there is levelled; the attacker gets bare ground.
 	building_at[cell] = Balance.Building.NONE
+	level_at[cell] = 0
 	owner_of[cell] = player
 	if previous != NEUTRAL:
 		_clamp_player(previous)
@@ -428,9 +484,11 @@ func snapshot() -> Dictionary:
 		"terrain": terrain.duplicate(),
 		"owner": owner_of.duplicate(),
 		"building": building_at.duplicate(),
+		"level": level_at.duplicate(),
 		"coins": coins.duplicate(),
 		"power": power.duplicate(),
 		"alive": alive.duplicate(),
+		"capture_ready": capture_ready.duplicate(),
 		"ships": ship_copy,
 		"tick": tick_count,
 		"finished": finished,
@@ -445,9 +503,11 @@ static func from_snapshot(data: Dictionary) -> GameState:
 	s.terrain = data["terrain"]
 	s.owner_of = data["owner"]
 	s.building_at = data["building"]
+	s.level_at = data["level"]
 	s.coins = data["coins"]
 	s.power = data["power"]
 	s.alive = data["alive"]
+	s.capture_ready = data["capture_ready"]
 	s.ships = []
 	for ship in data["ships"]:
 		s.ships.append((ship as Dictionary).duplicate(true))
@@ -467,10 +527,12 @@ func state_hash() -> int:
 	for i in range(owner_of.size()):
 		h = _hash_int(h, owner_of[i])
 		h = _hash_int(h, building_at[i])
+		h = _hash_int(h, level_at[i])
 	for p in range(coins.size()):
 		h = _hash_int(h, coins[p])
 		h = _hash_int(h, power[p])
 		h = _hash_int(h, alive[p])
+		h = _hash_int(h, capture_ready[p])
 	for ship in ships:
 		h = _hash_int(h, int(ship["owner"]))
 		h = _hash_int(h, int(ship["port"]))

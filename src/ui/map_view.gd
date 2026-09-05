@@ -10,6 +10,8 @@ var local_player := 0
 var selected := -1
 var ship_targets := PackedInt32Array()
 var opponent_focus := -1
+var attack_mode := false
+var cooldown_left := 0
 
 func map_size() -> Vector2:
 	if state == null:
@@ -44,27 +46,32 @@ func _draw() -> void:
 	for x in range(w + 1):
 		var strong := x % 5 == 0
 		draw_line(Vector2(x * CELL, 0), Vector2(x * CELL, h * CELL),
-			Ink.GRID_STRONG if strong else Ink.GRID, 2.0 if strong else 1.0)
+			Ink.GRID_STRONG if strong else Ink.GRID, 2.6 if strong else 1.4)
 	for y in range(h + 1):
 		var strong := y % 5 == 0
 		draw_line(Vector2(0, y * CELL), Vector2(w * CELL, y * CELL),
-			Ink.GRID_STRONG if strong else Ink.GRID, 2.0 if strong else 1.0)
+			Ink.GRID_STRONG if strong else Ink.GRID, 2.6 if strong else 1.4)
+
+	var margin_x := 2 * CELL
+	Ink.line(self, Vector2(margin_x, 0), Vector2(margin_x, h * CELL), Ink.MARGIN, 2.0)
 
 	_draw_territory()
 	_draw_buildings()
 	_draw_ships()
 
+	if attack_mode:
+		_draw_attack_targets()
+
 	if selected >= 0:
-		var r := cell_rect(selected).grow(-3.0)
-		draw_rect(r, Ink.INK, false, 3.0)
+		Ink.rect(self, cell_rect(selected).grow(-3.0), Ink.INK, 3.0)
 
 	for target in ship_targets:
-		draw_rect(cell_rect(target).grow(-8.0), Ink.pen_of(local_player), false, 3.0)
+		Ink.rect(self, cell_rect(target).grow(-8.0), Ink.pen_of(local_player), 3.0)
 
 	if opponent_focus >= 0:
 		_draw_focus_marker(opponent_focus)
 
-	draw_rect(full, Ink.INK, false, 4.0)
+	Ink.rect(self, full, Ink.INK, 4.0)
 
 func _draw_territory() -> void:
 	for i in range(state.owner_of.size()):
@@ -72,7 +79,7 @@ func _draw_territory() -> void:
 		if owner_id == GameState.NEUTRAL:
 			continue
 		var pen := Ink.pen_of(owner_id)
-		var tint := Color(pen.r, pen.g, pen.b, 0.22)
+		var tint := Color(pen.r, pen.g, pen.b, 0.15)
 		draw_rect(cell_rect(i), tint, true)
 
 	# Borders are drawn per edge so a territory reads as one outlined shape, the way a
@@ -86,13 +93,13 @@ func _draw_territory() -> void:
 		var x := i % state.width
 		var y := i / state.width
 		if x == 0 or state.owner_of[i - 1] != owner_id:
-			draw_line(r.position, r.position + Vector2(0, CELL), pen, 4.0)
+			Ink.line(self, r.position, r.position + Vector2(0, CELL), pen, 4.0)
 		if x == state.width - 1 or state.owner_of[i + 1] != owner_id:
-			draw_line(r.position + Vector2(CELL, 0), r.position + Vector2(CELL, CELL), pen, 4.0)
+			Ink.line(self, r.position + Vector2(CELL, 0), r.position + Vector2(CELL, CELL), pen, 4.0)
 		if y == 0 or state.owner_of[i - state.width] != owner_id:
-			draw_line(r.position, r.position + Vector2(CELL, 0), pen, 4.0)
+			Ink.line(self, r.position, r.position + Vector2(CELL, 0), pen, 4.0)
 		if y == state.height - 1 or state.owner_of[i + state.width] != owner_id:
-			draw_line(r.position + Vector2(0, CELL), r.position + Vector2(CELL, CELL), pen, 4.0)
+			Ink.line(self, r.position + Vector2(0, CELL), r.position + Vector2(CELL, CELL), pen, 4.0)
 
 func _draw_buildings() -> void:
 	for i in range(state.building_at.size()):
@@ -100,7 +107,9 @@ func _draw_buildings() -> void:
 		if type == Balance.Building.NONE:
 			continue
 		var pen := Ink.pen_of(int(state.owner_of[i]))
-		Ink.draw_building(self, type, cell_rect(i).grow(-CELL * 0.18), pen, 3.0)
+		var r := cell_rect(i)
+		Ink.draw_building(self, type, r.grow(-CELL * 0.18), pen, 3.0)
+		Ink.draw_level_pips(self, r, int(state.level_at[i]), pen)
 
 func _draw_ships() -> void:
 	for ship in state.ships:
@@ -122,9 +131,27 @@ func _draw_ships() -> void:
 			draw_polyline(wake, Color(pen.r, pen.g, pen.b, 0.3), 2.0)
 		Ink.draw_ship(self, a.lerp(b, progress), CELL * 0.5, pen, 3.0)
 
+# In attack mode every cell the player could take right now is ringed, so aiming is a
+# matter of tapping a marked square rather than guessing what borders what. The ring
+# fades while the capture is reloading, which is the cooldown made visible on the map.
+func _draw_attack_targets() -> void:
+	var pen := Ink.pen_of(local_player)
+	var alpha := 0.25 if cooldown_left > 0 else 0.85
+	for i in range(state.owner_of.size()):
+		if not is_land(i) or int(state.owner_of[i]) == local_player:
+			continue
+		if not state.touches_player(i, local_player):
+			continue
+		var r := cell_rect(i).grow(-6.0)
+		draw_rect(r, Color(pen.r, pen.g, pen.b, alpha * 0.16), true)
+		Ink.rect(self, r, Color(pen.r, pen.g, pen.b, alpha), 3.0)
+
+func is_land(cell: int) -> bool:
+	return state.terrain[cell] == WorldGen.LAND
+
 func _draw_focus_marker(cell: int) -> void:
 	var pen := Ink.pen_of(1 - local_player)
 	var r := cell_rect(cell)
 	var centre := r.get_center()
-	draw_arc(centre, CELL * 0.55, 0, TAU, 28, Color(pen.r, pen.g, pen.b, 0.55), 3.0)
-	draw_arc(centre, CELL * 0.25, 0, TAU, 20, Color(pen.r, pen.g, pen.b, 0.35), 2.0)
+	Ink.circle(self, centre, CELL * 0.55, Color(pen.r, pen.g, pen.b, 0.55), 3.0, 16)
+	Ink.circle(self, centre, CELL * 0.25, Color(pen.r, pen.g, pen.b, 0.35), 2.0, 12)

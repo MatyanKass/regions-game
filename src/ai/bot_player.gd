@@ -27,15 +27,15 @@ enum Level { EASY, NORMAL, HARD }
 # which is exactly the mistake a new player makes.
 const LEVELS := {
 	Level.EASY: {
-		"name": "easy", "act_every": 25, "power_slack": 2, "invest": false,
+		"name": "easy", "act_every": 50, "power_slack": 2, "invest": false,
 		"use_ships": false, "pressure": false, "noise": 9,
 	},
 	Level.NORMAL: {
-		"name": "normal", "act_every": 12, "power_slack": 1, "invest": true,
+		"name": "normal", "act_every": 24, "power_slack": 1, "invest": true,
 		"use_ships": true, "pressure": true, "noise": 3,
 	},
 	Level.HARD: {
-		"name": "hard", "act_every": 6, "power_slack": 1, "invest": true,
+		"name": "hard", "act_every": 12, "power_slack": 1, "invest": true,
 		"use_ships": true, "pressure": true, "noise": 0,
 	},
 }
@@ -50,12 +50,13 @@ const BUILDING_VALUE := {
 	Balance.Building.BARRACKS: 10,
 	Balance.Building.MILITARY_BASE: 16,
 	Balance.Building.PORT: 10,
+	Balance.Building.BARRIER: 4,
 }
 
 # How long the answer to "is a port worth it here" is kept. The map does not change,
 # only the borders do, and a breadth-first search per coastal cell is the one expensive
 # question the bot asks.
-const PORT_RECHECK_TICKS := 300
+const PORT_RECHECK_TICKS := 600
 
 var player: int
 var level: int

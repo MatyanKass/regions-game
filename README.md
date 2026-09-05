@@ -17,6 +17,7 @@ Design notes (Russian): [Notes/Игра Regions.md](Notes/Игра%20Regions.md)
 | M2 — build menu, capture, demolition, ports and ships | done |
 | M3 — LAN lobby, lockstep, pause on disconnect, desync resync | done |
 | M4 — win screen, RU/EN interface, Android build, music | done |
+| M5 — action modes, upgrades, barriers, hand-drawn interface | done |
 | M5 — practice match against a bot, three difficulties | done |
 
 Not in yet: an app icon of our own.
@@ -31,9 +32,12 @@ Against a person:
 1. Build the APK (below) and install it on two phones on the same Wi-Fi.
 2. One player taps **Создать комнату**. The other sees the room in the list and taps it.
    If the network eats broadcast traffic, type the host's address instead.
-3. Tap your own cell to build, double-tap a bordering cell to take it, tap a port to
-   send its ship - it finds its own way round headlands. The match ends when one side
-   has no cells left, or after 40 minutes.
+3. Pick one of the three modes along the bottom of the screen. In **build** mode a tap
+   on your own cell opens the build menu, and a tap on a building offers to upgrade or
+   demolish it. In **attack** mode a single tap takes a bordering cell; the rate of fire
+   is limited by a cooldown, a quarter of a second on open ground and four tenths on an
+   enemy cell. In **info** mode a tap reports who owns a cell and how they are doing.
+   The match ends when one side has no cells left, or after 40 minutes.
 
 ## Layout
 

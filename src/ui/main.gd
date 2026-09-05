@@ -4,6 +4,7 @@ extends Node
 var _screen: Node = null
 var _screenshot_path := ""
 var _shot_countdown := 45
+var _shot_attack := false
 
 func _ready() -> void:
 	I18n.detect_language()
@@ -15,6 +16,8 @@ func _ready() -> void:
 	for arg in args:
 		if arg.begins_with("--shot="):
 			_screenshot_path = arg.substr(7)
+		if arg == "--shot-attack":
+			_shot_attack = true
 	if args.has("--preview") or not _screenshot_path.is_empty():
 		Net.start_solo(20260905)
 		_stock_preview()
@@ -86,7 +89,9 @@ func _process(_delta: float) -> void:
 	if _screenshot_path.is_empty():
 		return
 	_shot_countdown -= 1
-	if _shot_countdown == 25 or _shot_countdown == 23:
+	if _shot_countdown == 30 and _shot_attack and _screen is MatchScreen:
+		(_screen as MatchScreen).set_mode(MatchScreen.Mode.ATTACK)
+	if not _shot_attack and (_shot_countdown == 25 or _shot_countdown == 23):
 		var touch := InputEventScreenTouch.new()
 		touch.index = 0
 		touch.position = get_viewport().get_visible_rect().size * 0.5
