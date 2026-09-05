@@ -83,7 +83,7 @@ func join_room(ip: String) -> bool:
 	return true
 
 func leave() -> void:
-	if is_host and mode == Mode.PLAYING:
+	if is_host and mode == Mode.PLAYING and multiplayer.has_multiplayer_peer():
 		_host_closing.rpc()
 	discovery.stop_broadcast()
 	discovery.stop_listen()
@@ -100,6 +100,13 @@ func leave() -> void:
 	_hash_log.clear()
 	_peer_of_player.clear()
 	_accumulator = 0.0
+
+# A match against nobody, for looking at the map while developing. It runs the very
+# same tick loop; it simply has no peer to talk to.
+func start_solo(seed_value: int) -> void:
+	leave()
+	is_host = true
+	_start_local(seed_value, 0)
 
 # --- Connection events -----------------------------------------------------------
 
@@ -207,7 +214,8 @@ func _host_tick() -> void:
 	var batch := PackedInt32Array(_pending)
 	_pending.clear()
 	_run_tick(batch, true)
-	_advance.rpc(state.tick_count, batch)
+	if multiplayer.has_multiplayer_peer():
+		_advance.rpc(state.tick_count, batch)
 	_hash_log[state.tick_count] = state.state_hash()
 	if _hash_log.size() > HASH_HISTORY:
 		var oldest: int = state.tick_count - HASH_HISTORY
@@ -264,7 +272,8 @@ func set_paused(value: bool) -> void:
 	if not is_host:
 		return
 	paused = value
-	_set_paused.rpc(value)
+	if multiplayer.has_multiplayer_peer():
+		_set_paused.rpc(value)
 	emit_signal("pause_changed", value)
 
 @rpc("authority", "call_remote", "reliable")
@@ -278,7 +287,7 @@ func set_local_focus(cell: int) -> void:
 	_local_focus = cell
 
 func _report_focus(delta: float) -> void:
-	if mode != Mode.PLAYING or _local_focus < 0:
+	if mode != Mode.PLAYING or _local_focus < 0 or not multiplayer.has_multiplayer_peer():
 		return
 	_focus_timer -= delta
 	if _focus_timer > 0.0:

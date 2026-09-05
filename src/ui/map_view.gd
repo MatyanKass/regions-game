@@ -72,7 +72,7 @@ func _draw_territory() -> void:
 		if owner_id == GameState.NEUTRAL:
 			continue
 		var pen := Ink.pen_of(owner_id)
-		var tint := Color(pen.r, pen.g, pen.b, 0.13)
+		var tint := Color(pen.r, pen.g, pen.b, 0.22)
 		draw_rect(cell_rect(i), tint, true)
 
 	# Borders are drawn per edge so a territory reads as one outlined shape, the way a

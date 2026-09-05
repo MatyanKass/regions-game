@@ -28,6 +28,13 @@ window/stretch/aspect="expand"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 
+; Off-map area reads as the darker edge of the sheet rather than engine grey.
+environment/defaults/default_clear_color=Color(0.902, 0.874, 0.796, 1)
+
+; Required for Android exports. The game draws with lines rather than textures, so this
+; costs nothing here beyond satisfying the exporter.
+textures/vram_compression/import_etc2_astc=true
+
 [input_devices]
 
 ; One code path for taps on a phone and clicks on a desktop during development.

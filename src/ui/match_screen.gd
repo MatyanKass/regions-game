@@ -48,7 +48,7 @@ func _ready() -> void:
 	add_child(map_view)
 
 	camera = Camera2D.new()
-	camera.zoom = Vector2(0.9, 0.9)
+	camera.zoom = Vector2(0.75, 0.75)
 	add_child(camera)
 	camera.make_current()
 	_centre_on_home()
@@ -142,6 +142,8 @@ func _build_hud() -> void:
 
 	_build_menu = BuildMenu.new()
 	_build_menu.set_anchors_preset(Control.PRESET_CENTER)
+	_build_menu.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_build_menu.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_build_menu.visible = false
 	_build_menu.picked.connect(_on_build_picked)
 	_build_menu.closed.connect(func(): _build_menu.visible = false)
@@ -150,6 +152,8 @@ func _build_hud() -> void:
 	_overlay = PanelContainer.new()
 	_overlay.add_theme_stylebox_override("panel", _panel_style(Color(0.98, 0.96, 0.90, 0.97)))
 	_overlay.set_anchors_preset(Control.PRESET_CENTER)
+	_overlay.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_overlay.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_overlay.visible = false
 	_hud.add_child(_overlay)
 	var overlay_box := VBoxContainer.new()

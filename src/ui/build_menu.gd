@@ -54,10 +54,24 @@ func _init() -> void:
 			Balance.Building.BARRACKS, Balance.Building.MILITARY_BASE, Balance.Building.PORT]:
 		_grid.add_child(_make_slot(type))
 
+# Slots are paper on a slate frame, the way an inventory grid reads: the glyph has to
+# be dark ink on a light square or it disappears into the panel.
+static func _slot_style(bg: Color, border: Color) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = bg
+	box.border_color = border
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(3)
+	return box
+
 func _make_slot(type: int) -> Button:
 	var data: Dictionary = Balance.BUILDINGS[type]
 	var slot := Button.new()
 	slot.custom_minimum_size = SLOT_SIZE
+	slot.add_theme_stylebox_override("normal", _slot_style(Ink.SLOT, Ink.SLOT_DARK))
+	slot.add_theme_stylebox_override("hover", _slot_style(Ink.SLOT.lightened(0.08), Ink.INK))
+	slot.add_theme_stylebox_override("pressed", _slot_style(Ink.SLOT.darkened(0.1), Ink.INK))
+	slot.add_theme_stylebox_override("disabled", _slot_style(Ink.SLOT.darkened(0.05), Ink.SLOT_DARK))
 	slot.tooltip_text = I18n.building_name(type)
 	slot.pressed.connect(func(): emit_signal("picked", type))
 
@@ -76,6 +90,7 @@ func _make_slot(type: int) -> Button:
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	caption.add_theme_font_size_override("font_size", 13)
+	caption.add_theme_color_override("font_color", Ink.INK)
 	caption.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	caption.offset_top = -44
 	caption.text = "%s\n%s" % [I18n.building_name(type), _price_text(data)]
