@@ -149,10 +149,15 @@ func aggregate(player: int) -> Dictionary:
 		coin_per_tick += int(data["coin_per_tick"]) * int(job[0])
 
 	# The flat base income is what keeps a one-cell player in the game, so it is tied to
-	# owning territory at all rather than to any building.
+	# owning territory at all rather than to any building. On top of it, every cell pays
+	# a little and holds a little, which is what makes taking ground worth something in
+	# its own right rather than only as a way to reach the enemy.
 	if cells > 0:
 		coin_per_tick += Balance.BASE_COIN_PER_TICK
 		power_per_tick += Balance.BASE_POWER_PER_TICK
+	coin_per_tick += cells * Balance.CELL_COIN_PER_TICK
+	coin_cap += cells * Balance.CELL_COIN_CAP
+	power_cap += cells * Balance.CELL_POWER_CAP
 	return {
 		"cells": cells,
 		"coin_per_tick": coin_per_tick,

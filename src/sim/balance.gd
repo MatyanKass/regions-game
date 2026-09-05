@@ -1,7 +1,7 @@
 # Every tunable number in the game lives here. No other sim file hardcodes a value,
 # so balancing the whole match is a single-file edit.
 #
-# Coins and power are stored as integer "centi" units (1 displayed point == 100 units).
+# Coins and power are stored as integer thousandths (1 displayed point == UNIT).
 # The simulation must never use floating point: both clients run the same tick loop and
 # any rounding difference desyncs the match.
 class_name Balance
@@ -11,7 +11,11 @@ extends RefCounted
 # of a second: at 10 Hz neither is a whole number of ticks, and the simulation is not
 # allowed to round.
 const TICKS_PER_SECOND := 20
-const UNIT := 100
+# Coins and power are counted in thousandths of a point. Hundredths were enough until
+# land started paying: a cell earns 0.02 a second, which is a fifth of a hundredth per
+# tick and would have had to be rounded. Rounding is exactly what a lockstep simulation
+# may not do, so the unit got finer instead.
+const UNIT := 1000
 
 # --- World ---
 const MAP_WIDTH := 25
@@ -24,8 +28,17 @@ const START_DISTANCE := 16
 const MATCH_LIMIT_TICKS := 40 * 60 * TICKS_PER_SECOND
 
 # --- Base economy, granted only while a player still owns at least one cell ---
-const BASE_COIN_PER_TICK := 5     # 1 coin a second
-const BASE_POWER_PER_TICK := 5    # 1 power a second
+const BASE_COIN_PER_TICK := 50     # 1 coin a second
+const BASE_POWER_PER_TICK := 50    # 1 power a second
+
+# What one cell of territory is worth. Land used to be worth nothing at all: a country
+# of five hundred cells earned exactly what it earned at twenty, so the second half of a
+# match was painting empty squares. It is deliberately tiny per cell - a hundred cells
+# earn two coins a second - so that it rewards holding ground without turning the first
+# few captures into a runaway.
+const CELL_COIN_PER_TICK := 1      # 0.02 coins a second per cell
+const CELL_COIN_CAP := UNIT / 2    # and a little room to keep them in
+const CELL_POWER_CAP := UNIT / 4
 const BASE_COIN_CAP := 100 * UNIT
 const BASE_POWER_CAP := 50 * UNIT
 const START_COINS := 0
@@ -64,7 +77,7 @@ const BUILDINGS := {
 		"name": "factory",
 		"coin_cost": 40 * UNIT, "power_cost": 0,
 		"workers": 1, "people": 0,
-		"coin_per_tick": 1, "power_per_tick": 0,
+		"coin_per_tick": 10, "power_per_tick": 0,
 		"coin_cap": 0, "power_cap": 0,
 		"coastal": false, "max_level": MAX_LEVEL,
 	},
@@ -96,7 +109,7 @@ const BUILDINGS := {
 		"name": "military_base",
 		"coin_cost": 60 * UNIT, "power_cost": 15 * UNIT,
 		"workers": 0, "people": 0,
-		"coin_per_tick": 0, "power_per_tick": 5,
+		"coin_per_tick": 0, "power_per_tick": 50,
 		"coin_cap": 0, "power_cap": 0,
 		"coastal": false, "max_level": MAX_LEVEL,
 	},

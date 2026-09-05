@@ -60,21 +60,26 @@ func test_base_income_and_cap() -> void:
 	expect_eq(s.coins[0], 0, "match starts with no coins")
 	for i in range(Balance.TICKS_PER_SECOND):
 		s.tick()
-	expect_eq(s.coins[0], 1 * Balance.UNIT, "one second of base income is one coin")
-	expect_eq(s.power[0], 1 * Balance.UNIT, "one second of base income is one power")
+	# One cell: the flat base income plus what that single cell pays.
+	expect_eq(s.coins[0],
+		(Balance.BASE_COIN_PER_TICK + Balance.CELL_COIN_PER_TICK) * Balance.TICKS_PER_SECOND,
+		"a second of income is one coin plus the cell's share")
+	expect_eq(s.power[0], 1 * Balance.UNIT, "land pays no power, so this is just the base")
 	# 100 coins at 1/s takes 100 seconds; run past that to prove the cap holds.
 	for i in range(120 * Balance.TICKS_PER_SECOND):
 		s.tick()
-	expect_eq(s.coins[0], Balance.BASE_COIN_CAP, "coins must stop at the storage cap")
-	expect_eq(s.power[0], Balance.BASE_POWER_CAP, "power must stop at the storage cap")
+	expect_eq(s.coins[0], Balance.BASE_COIN_CAP + Balance.CELL_COIN_CAP,
+		"coins must stop at the storage cap")
+	expect_eq(s.power[0], Balance.BASE_POWER_CAP + Balance.CELL_POWER_CAP,
+		"power must stop at the storage cap")
 
 func test_bank_raises_the_coin_cap() -> void:
 	var s := _state_with_coins(7, 200 * Balance.UNIT)
 	var home := _home_of(s, 0)
 	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BANK)), "",
 		"a bank should be buildable with enough coins")
-	expect_eq(int(s.aggregate(0)["coin_cap"]), Balance.BASE_COIN_CAP + 10 * Balance.UNIT,
-		"a bank adds ten coins of storage")
+	expect_eq(int(s.aggregate(0)["coin_cap"]), _expected_coin_cap(s, 0, 10 * Balance.UNIT),
+		"a bank adds ten coins of storage on top of what the land holds")
 
 func test_factory_needs_a_free_person() -> void:
 	var s := _state_with_coins(7, 500 * Balance.UNIT)
@@ -104,7 +109,8 @@ func test_demolishing_a_bank_clamps_the_purse() -> void:
 	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.BANK))
 	s.coins[0] = int(s.aggregate(0)["coin_cap"])
 	s.apply_command(0, GameState.make_command(GameState.Command.DEMOLISH, home))
-	expect_eq(s.coins[0], Balance.BASE_COIN_CAP, "losing the bank must clamp coins to the smaller cap")
+	expect_eq(s.coins[0], _expected_coin_cap(s, 0, 0),
+		"losing the bank must clamp coins to the smaller cap")
 
 # --- Capture ---
 
@@ -308,7 +314,7 @@ func test_upgrade_scales_the_effect_and_the_price() -> void:
 		"an upgrade should be possible with the coins for it")
 	expect_eq(before - int(s.coins[0]), Balance.upgrade_coin_cost(Balance.Building.BANK, 2),
 		"level two costs twice the base price")
-	expect_eq(int(s.aggregate(0)["coin_cap"]), Balance.BASE_COIN_CAP + 20 * Balance.UNIT,
+	expect_eq(int(s.aggregate(0)["coin_cap"]), _expected_coin_cap(s, 0, 20 * Balance.UNIT),
 		"a level two bank holds twice as much")
 
 func test_upgrades_stop_at_the_ceiling() -> void:
@@ -389,8 +395,9 @@ func test_losing_housing_idles_a_factory_instead_of_going_negative() -> void:
 		"with nobody left, both factories stand idle")
 	expect(int(after["coin_per_tick"]) < working,
 		"an idle factory must stop earning, not keep paying out of nowhere")
-	expect_eq(int(after["coin_per_tick"]), Balance.BASE_COIN_PER_TICK,
-		"only the flat base income is left")
+	expect_eq(int(after["coin_per_tick"]),
+		Balance.BASE_COIN_PER_TICK + int(after["cells"]) * Balance.CELL_COIN_PER_TICK,
+		"only the base income and what the remaining land pays is left")
 
 func test_the_biggest_factory_is_staffed_first() -> void:
 	# One level one house holds two residents. Three factories therefore leave one idle,
@@ -415,7 +422,10 @@ func test_the_biggest_factory_is_staffed_first() -> void:
 	expect_eq(int(idle.size()), 1, "three factories and two residents leaves one idle")
 	expect(not idle.has(big), "the level three factory is the one kept running")
 	# Two staffed factories: the level three one and one of the level ones.
-	var expected := Balance.BASE_COIN_PER_TICK 		+ int(Balance.BUILDINGS[Balance.Building.FACTORY]["coin_per_tick"]) * 4
+	# The level three factory and one level one factory are staffed: four levels in all.
+	var expected := Balance.BASE_COIN_PER_TICK \
+		+ int(agg["cells"]) * Balance.CELL_COIN_PER_TICK \
+		+ int(Balance.BUILDINGS[Balance.Building.FACTORY]["coin_per_tick"]) * 4
 	expect_eq(int(agg["coin_per_tick"]), expected, "only the staffed factories pay")
 
 func test_idle_factories_do_not_break_the_lockstep() -> void:
@@ -495,6 +505,14 @@ func test_hash_notices_a_difference() -> void:
 	expect(a.state_hash() != b.state_hash(), "the hash must catch a one-unit difference")
 
 # --- Helpers ---
+
+# Land pays and land holds, so almost every economy figure depends on how many cells the
+# player owns. Saying so out loud beats sprinkling the constants around.
+func _cells(s: GameState, player: int) -> int:
+	return int(s.aggregate(player)["cells"])
+
+func _expected_coin_cap(s: GameState, player: int, from_buildings: int) -> int:
+	return Balance.BASE_COIN_CAP + _cells(s, player) * Balance.CELL_COIN_CAP + from_buildings
 
 func _home_of(s: GameState, player: int) -> int:
 	for i in range(s.owner_of.size()):

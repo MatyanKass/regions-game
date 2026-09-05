@@ -21,6 +21,7 @@ Design notes (Russian): [Notes/Игра Regions.md](Notes/Игра%20Regions.md)
 | M6 — app icon, sound effects, more music, Windows build | done |
 | M7 — the lobby redrawn, thirteen tracks | done |
 | M8 — staffing: a factory with nobody in it earns nothing | done |
+| M9 — land pays, so holding ground is worth something | done |
 | M5 — practice match against a bot, three difficulties | done |
 
 Sound effects are synthesised in code at startup rather than shipped as files, so
