@@ -5,6 +5,7 @@ var _screen: Node = null
 var _screenshot_path := ""
 var _shot_countdown := 45
 var _shot_attack := false
+var _shot_lobby := false
 var _icon_dir := ""
 
 func _ready() -> void:
@@ -19,10 +20,15 @@ func _ready() -> void:
 			_screenshot_path = arg.substr(7)
 		if arg == "--shot-attack":
 			_shot_attack = true
+		if arg == "--shot-lobby":
+			_shot_lobby = true
 		if arg.begins_with("--icons="):
 			_icon_dir = arg.substr(8)
 	if not _icon_dir.is_empty():
 		_render_icons()
+		return
+	if _shot_lobby:
+		_open_lobby()
 		return
 	if args.has("--preview") or not _screenshot_path.is_empty():
 		Net.start_solo(20260905)
@@ -135,7 +141,8 @@ func _process(_delta: float) -> void:
 	_shot_countdown -= 1
 	if _shot_countdown == 30 and _shot_attack and _screen is MatchScreen:
 		(_screen as MatchScreen).set_mode(MatchScreen.Mode.ATTACK)
-	if not _shot_attack and (_shot_countdown == 25 or _shot_countdown == 23):
+	if not _shot_attack and not _shot_lobby \
+			and (_shot_countdown == 25 or _shot_countdown == 23):
 		var touch := InputEventScreenTouch.new()
 		touch.index = 0
 		touch.position = get_viewport().get_visible_rect().size * 0.5

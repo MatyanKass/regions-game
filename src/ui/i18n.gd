@@ -8,6 +8,8 @@ static var language := "ru"
 const STRINGS := {
 	"app_title": {"ru": "Regions", "en": "Regions"},
 	"host_game": {"ru": "Создать комнату", "en": "Host a room"},
+	"tagline": {"ru": "Клеточная стратегия на двоих. Строй, копи силу, забирай клетки.",
+		"en": "A grid strategy for two. Build up, save power, take ground."},
 	"rooms": {"ru": "Комнаты в сети", "en": "Rooms on the network"},
 	"searching": {"ru": "Идёт поиск комнат…", "en": "Looking for rooms…"},
 	"no_rooms": {"ru": "Комнат не найдено", "en": "No rooms found"},

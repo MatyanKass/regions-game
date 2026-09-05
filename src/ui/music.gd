@@ -15,6 +15,7 @@ const FOLDERS := {"calm": "res://assets/music/calm", "combat": "res://assets/mus
 var _players: Dictionary = {}     # mood -> AudioStreamPlayer
 var _tracks: Dictionary = {}      # mood -> Array[AudioStream]
 var _mood := ""
+var _last_played: Dictionary = {}   # mood -> index of the track played last
 
 func _ready() -> void:
 	for mood in FOLDERS:
@@ -63,9 +64,16 @@ func stop() -> void:
 	for mood in _players:
 		(_players[mood] as AudioStreamPlayer).stop()
 
+# Picks a track at random, but never the one that has just finished. With a dozen
+# tracks in the folders, hearing the same one twice in a row is the thing a player
+# actually notices.
 func _pick(mood: String) -> AudioStream:
 	var list: Array = _tracks[mood]
-	return list[randi() % list.size()]
+	var index := randi() % list.size()
+	if list.size() > 1 and index == int(_last_played.get(mood, -1)):
+		index = (index + 1 + randi() % (list.size() - 1)) % list.size()
+	_last_played[mood] = index
+	return list[index]
 
 func _on_finished(mood: String) -> void:
 	if mood != _mood or (_tracks[mood] as Array).is_empty():

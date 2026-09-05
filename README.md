@@ -19,6 +19,7 @@ Design notes (Russian): [Notes/Игра Regions.md](Notes/Игра%20Regions.md)
 | M4 — win screen, RU/EN interface, Android build, music | done |
 | M5 — action modes, upgrades, barriers, hand-drawn interface | done |
 | M6 — app icon, sound effects, more music, Windows build | done |
+| M7 — the lobby redrawn, thirteen tracks | done |
 | M5 — practice match against a bot, three difficulties | done |
 
 Sound effects are synthesised in code at startup rather than shipped as files, so
@@ -28,8 +29,10 @@ moment they touch.
 
 ## Running it on a PC
 
-    powershell -File toolsun.ps1              # the lobby, same as on a phone
-    powershell -File toolsun.ps1 -Practice    # straight into a match against the bot
+    powershell -File tools
+un.ps1              # the lobby, same as on a phone
+    powershell -File tools
+un.ps1 -Practice    # straight into a match against the bot
     powershell -File toolsuild_windows.ps1    # a standalone build\Regions.exe
 
 The desktop build is the same game, mouse instead of finger: drag to pan, wheel to zoom,

@@ -83,6 +83,59 @@ static func button(node: Button, accent: Color = Ink.INK, filled: bool = false) 
 static func _click() -> void:
 	Sfx.play("tap")
 
+# Text fields and dropdowns get the same paper treatment as buttons, or they stand out
+# as the one part of the screen the engine styled instead of us.
+static func line_edit(node: LineEdit) -> void:
+	node.add_theme_stylebox_override("normal", box(Ink.PAPER_PANEL, Ink.SLOT_DARK, BORDER, RADIUS, 10))
+	node.add_theme_stylebox_override("focus", box(Ink.PAPER_PANEL, Ink.INK, BORDER, RADIUS, 10))
+	node.add_theme_color_override("font_color", Ink.INK)
+	node.add_theme_color_override("font_placeholder_color", Ink.INK_SOFT)
+	node.add_theme_color_override("caret_color", Ink.INK)
+
+static func option(node: OptionButton) -> void:
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		node.add_theme_stylebox_override(state, box(Ink.PAPER_PANEL, Ink.INK, BORDER, RADIUS, 10))
+	node.add_theme_color_override("font_color", Ink.INK)
+	node.add_theme_color_override("font_hover_color", Ink.INK)
+	node.add_theme_color_override("font_pressed_color", Ink.INK)
+	node.add_theme_color_override("font_focus_color", Ink.INK)
+	var popup := node.get_popup()
+	popup.add_theme_stylebox_override("panel", box(Ink.PAPER_PANEL, Ink.INK, BORDER, RADIUS, 6))
+	popup.add_theme_color_override("font_color", Ink.INK)
+	popup.add_theme_color_override("font_hover_color", Ink.PAPER)
+	popup.add_theme_stylebox_override("hover", box(Ink.INK, Ink.INK, 0, 4, 4))
+
+# The page the whole interface sits on: paper, printed squares and the red margin rule,
+# so a menu looks like the same notebook the match is played in.
+class Paper:
+	extends Control
+	const SQUARE := 34.0
+
+	func _draw() -> void:
+		draw_rect(Rect2(Vector2.ZERO, size), Ink.PAPER, true)
+		var columns := int(size.x / SQUARE) + 1
+		var rows := int(size.y / SQUARE) + 1
+		for i in range(columns):
+			var x := i * SQUARE
+			draw_line(Vector2(x, 0), Vector2(x, size.y), Ink.GRID, 1.2)
+		for i in range(rows):
+			var y := i * SQUARE
+			draw_line(Vector2(0, y), Vector2(size.x, y), Ink.GRID, 1.2)
+		var margin_x := SQUARE * 2.0
+		Ink.line(self, Vector2(margin_x, 0), Vector2(margin_x, size.y), Ink.MARGIN, 2.0)
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			queue_redraw()
+
+# A pen stroke under a heading, drawn rather than typed.
+class Underline:
+	extends Control
+	var colour := Ink.INK
+
+	func _draw() -> void:
+		Ink.line(self, Vector2(0, size.y * 0.5), Vector2(size.x, size.y * 0.5), colour, 3.0)
+
 static func heading(text: String, px: int = 20, colour: Color = Ink.INK) -> Label:
 	var label := Label.new()
 	label.text = text
