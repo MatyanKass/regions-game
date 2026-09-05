@@ -40,6 +40,7 @@ var _pinch_distance := 0.0
 var _last_tap_cell := -1
 var _last_tap_ms := 0
 var _toast_left := 0.0
+var _mood_timer := 0.0
 
 func _ready() -> void:
 	map_view = MapView.new()
@@ -190,6 +191,28 @@ func _process(delta: float) -> void:
 	map_view.opponent_focus = Net.opponent_focus
 	Net.set_local_focus(map_view.cell_at(camera.position))
 	_update_clock()
+	_update_mood(delta)
+
+# The music turns tense the moment the two territories actually touch. Scanning the
+# grid once a second is plenty for something that changes this rarely.
+func _update_mood(delta: float) -> void:
+	_mood_timer -= delta
+	if _mood_timer > 0.0:
+		return
+	_mood_timer = 1.0
+	Music.set_mood("combat" if _in_contact() else "calm")
+
+func _in_contact() -> bool:
+	var st := Net.state
+	var me := Net.local_player
+	var foe := Net.opponent_index()
+	for i in range(st.owner_of.size()):
+		if int(st.owner_of[i]) != me:
+			continue
+		for n in st.neighbours(i):
+			if int(st.owner_of[n]) == foe:
+				return true
+	return false
 
 func _on_advanced() -> void:
 	map_view.state = Net.state

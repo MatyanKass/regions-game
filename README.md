@@ -16,9 +16,11 @@ Design notes (Russian): [Notes/Игра Regions.md](Notes/Игра%20Regions.md)
 | M1 — map rendering, pan/zoom, notebook look | done |
 | M2 — build menu, capture, demolition, ports and ships | done |
 | M3 — LAN lobby, lockstep, pause on disconnect, desync resync | done |
-| M4 — win screen, RU/EN interface, Android build | done, no sound yet |
+| M4 — win screen, RU/EN interface, Android build, music system | done |
 
-Not in yet: sound and music, an app icon, a practice mode against a bot.
+Not in yet: the music files themselves (the player that switches calm and combat tracks
+is in place - see [assets/music/README.md](assets/music/README.md)), an app icon, and a
+practice mode against a bot.
 
 ## Playing it
 

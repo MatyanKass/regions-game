@@ -16,6 +16,9 @@ run/main_scene="res://src/ui/main.tscn"
 ; devices address it by the same node path, which is what Godot RPCs require.
 Net="*res://src/net/net_match.gd"
 
+; Background music. Silent until tracks are dropped into assets/music.
+Music="*res://src/ui/music.gd"
+
 [display]
 
 window/size/viewport_width=1280

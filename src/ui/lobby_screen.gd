@@ -69,6 +69,7 @@ func _ready() -> void:
 	Net.rooms_changed.connect(_refresh_rooms)
 	Net.lobby_status.connect(func(text: String): _status.text = text)
 	Net.connection_lost.connect(func(text: String): _status.text = text)
+	Music.set_mood("calm")
 	Net.browse_rooms()
 	_refresh_rooms()
 
