@@ -24,6 +24,9 @@ const INK_SOFT := Color("5a6a86")
 const NEUTRAL_FILL := Color(0, 0, 0, 0)
 # The red rule down the left of a school exercise book.
 const MARGIN := Color("d08a86")
+# Warnings are a hotter red than either biro, so "this is broken" never reads as
+# "this belongs to the red player".
+const ALERT := Color("e0341c")
 
 # Player pen colours: blue biro and red biro, the two pens everyone had at school.
 const PENS := [Color("1b4fa0"), Color("bd2f22")]
@@ -346,6 +349,18 @@ static func draw_level_pips(ci: CanvasItem, r: Rect2, level: int, c: Color) -> v
 	var start := r.position + Vector2(r.size.x - size - gap * (level - 1), size * 1.4)
 	for i in range(level):
 		ci.draw_circle(start + Vector2(gap * i, 0), size * 0.48, c)
+
+# A crossed-out circle in the corner of a building that has nobody to work it. Drawn
+# in the alert red rather than in a player colour, and paired with the building being
+# greyed out, so it reads the same for either side.
+static func draw_idle_badge(ci: CanvasItem, r: Rect2) -> void:
+	var radius := r.size.x * 0.17
+	var centre := r.position + Vector2(radius * 1.25, radius * 1.25)
+	var width := maxf(1.6, radius * 0.28)
+	ci.draw_circle(centre, radius, Color(PAPER.r, PAPER.g, PAPER.b, 0.85))
+	circle(ci, centre, radius, ALERT, width, 12)
+	var reach := radius * 0.62
+	line(ci, centre + Vector2(-reach, -reach), centre + Vector2(reach, reach), ALERT, width)
 
 static func draw_ship(ci: CanvasItem, centre: Vector2, size: float, c: Color, w: float) -> void:
 	var half := size * 0.5

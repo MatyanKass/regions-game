@@ -360,6 +360,86 @@ func test_levels_and_cooldowns_survive_a_snapshot() -> void:
 	expect_eq(copy.capture_cooldown_left(0), s.capture_cooldown_left(0),
 		"so did the cooldown")
 
+# --- Staffing: a factory with nobody in it earns nothing ---
+
+func test_losing_housing_idles_a_factory_instead_of_going_negative() -> void:
+	var s := _state_with_coins(7, 5000 * Balance.UNIT)
+	var home := _home_of(s, 0)
+	var second := _grant_cell(s, 0, home)
+	var third := _grant_cell(s, 0, second)
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE))
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, second, Balance.Building.FACTORY))
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, third, Balance.Building.FACTORY))
+	var working := int(s.aggregate(0)["coin_per_tick"])
+	expect_eq(int(s.aggregate(0)["free_people"]), 0, "both residents are at work")
+	expect_eq(int((s.aggregate(0)["idle_cells"] as PackedInt32Array).size()), 0,
+		"nothing is idle while the house stands")
+
+	# The enemy takes the house. Its residents go with it, and one factory has to stop.
+	var attacker := _grant_cell(s, 1, home)
+	s.power[1] = 50 * Balance.UNIT
+	expect_eq(s.apply_command(1, GameState.make_command(GameState.Command.CAPTURE, home)), "",
+		"the house should be capturable")
+	expect(attacker >= 0, "the attacker had a staging cell")
+
+	var after := s.aggregate(0)
+	expect_eq(int(after["people"]), 0, "the residents went with the house")
+	expect(int(after["free_people"]) >= 0, "free people must never go negative")
+	expect_eq(int((after["idle_cells"] as PackedInt32Array).size()), 2,
+		"with nobody left, both factories stand idle")
+	expect(int(after["coin_per_tick"]) < working,
+		"an idle factory must stop earning, not keep paying out of nowhere")
+	expect_eq(int(after["coin_per_tick"]), Balance.BASE_COIN_PER_TICK,
+		"only the flat base income is left")
+
+func test_the_biggest_factory_is_staffed_first() -> void:
+	# One level one house holds two residents. Three factories therefore leave one idle,
+	# and the one that stops must be a small one: staffing the biggest first is what a
+	# player would do by hand.
+	var s := GameState.create(7)
+	var home := _home_of(s, 0)
+	var small_a := _grant_cell(s, 0, home)
+	var big := _grant_cell(s, 0, small_a)
+	var small_b := _grant_cell(s, 0, big)
+	expect(small_b >= 0, "seed 7 should offer four cells in a row")
+	s.building_at[home] = Balance.Building.HOUSE
+	s.level_at[home] = 1
+	for cell in [small_a, big, small_b]:
+		s.building_at[cell] = Balance.Building.FACTORY
+		s.level_at[cell] = 1
+	s.level_at[big] = 3
+
+	var agg := s.aggregate(0)
+	expect_eq(int(agg["people"]), 2, "one level one house holds two")
+	var idle: PackedInt32Array = agg["idle_cells"]
+	expect_eq(int(idle.size()), 1, "three factories and two residents leaves one idle")
+	expect(not idle.has(big), "the level three factory is the one kept running")
+	# Two staffed factories: the level three one and one of the level ones.
+	var expected := Balance.BASE_COIN_PER_TICK 		+ int(Balance.BUILDINGS[Balance.Building.FACTORY]["coin_per_tick"]) * 4
+	expect_eq(int(agg["coin_per_tick"]), expected, "only the staffed factories pay")
+
+func test_idle_factories_do_not_break_the_lockstep() -> void:
+	var a := GameState.create(77)
+	var b := GameState.create(77)
+	for state in [a, b]:
+		var home := _home_of(state, 0)
+		state.coins[0] = 5000 * Balance.UNIT
+		var next := _grant_cell(state, 0, home)
+		var third := _grant_cell(state, 0, next)
+		state.building_at[home] = Balance.Building.FACTORY
+		state.level_at[home] = 2
+		state.building_at[next] = Balance.Building.FACTORY
+		state.level_at[next] = 2
+		state.building_at[third] = Balance.Building.FACTORY
+		state.level_at[third] = 1
+	for i in range(60):
+		a.tick()
+		b.tick()
+	# Equal levels mean the tie is broken on cell index, which both sides must resolve
+	# the same way or the income would drift apart.
+	expect_eq(a.state_hash(), b.state_hash(), "staffing has to be decided identically")
+	expect_eq(int(a.coins[0]), int(b.coins[0]), "and so does the income it produces")
+
 # --- Determinism ---
 
 func test_two_runs_of_the_same_commands_match() -> void:

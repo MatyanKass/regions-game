@@ -374,9 +374,15 @@ func _refresh_stats() -> void:
 	(_chips["power"] as UiKit.Chip).set_values(
 		"%d/%d" % [int(st.power[me]) / Balance.UNIT, int(agg["power_cap"]) / Balance.UNIT],
 		"+%.1f/%s" % [float(agg["power_per_tick"]) * per_second, I18n.t("second")])
+	var idle := int((agg["idle_cells"] as PackedInt32Array).size())
 	(_chips["people"] as UiKit.Chip).set_values(
 		"%d/%d" % [int(agg["free_people"]), int(agg["people"])],
-		"%s %d" % [I18n.t("cells"), int(agg["cells"])])
+		"%s %d" % [I18n.t("cells"), int(agg["cells"])] if idle == 0
+			else "%d %s" % [idle, I18n.t("idle")])
+	# Idle factories are money the player thinks they are earning and is not, so the
+	# figure turns the warning colour rather than sitting quietly in grey.
+	(_chips["people"] as UiKit.Chip).rate_label.add_theme_color_override("font_color",
+		Ink.ALERT if idle > 0 else Ink.INK_SOFT)
 
 func _update_clock() -> void:
 	var left := maxi(0, Balance.MATCH_LIMIT_TICKS - Net.state.tick_count) / Balance.TICKS_PER_SECOND

@@ -12,6 +12,7 @@ signal closed
 var _icon: UiKit.Glyph
 var _title: Label
 var _detail: Label
+var _idle_note: Label
 var _upgrade: Button
 var _demolish: Button
 var _ship: Button
@@ -34,6 +35,9 @@ func _init() -> void:
 	titles.add_child(_title)
 	_detail = UiKit.body("", 13, Ink.INK_SOFT)
 	titles.add_child(_detail)
+	_idle_note = UiKit.body(I18n.t("idle_building"), 13, Ink.ALERT)
+	_idle_note.visible = false
+	titles.add_child(_idle_note)
 	header.add_child(titles)
 	var close := Button.new()
 	close.text = "✕"
@@ -76,6 +80,8 @@ func show_cell(state: GameState, player: int, cell: int) -> void:
 	_icon.queue_redraw()
 	_title.text = I18n.building_name(type)
 	_detail.text = "%s %d/%d   %s" % [I18n.t("level"), level, max_level, _effect_text(type, level)]
+	var idle: PackedInt32Array = state.aggregate(player)["idle_cells"]
+	_idle_note.visible = idle.has(cell)
 
 	_ship.visible = type == Balance.Building.PORT
 	_ship.text = I18n.t("send_ship")

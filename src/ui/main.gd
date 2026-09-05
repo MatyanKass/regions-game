@@ -90,8 +90,11 @@ func _stock_preview() -> void:
 		if int(st.owner_of[i]) == 0:
 			home = i
 			break
-	var plan := [Balance.Building.HOUSE, Balance.Building.FACTORY, Balance.Building.BANK,
-		Balance.Building.MILITARY_BASE, Balance.Building.BARRACKS, Balance.Building.HOUSE]
+	# One house against three factories, so the preview shows a region that has outgrown
+	# its housing: the third factory stands idle and is marked as such.
+	var plan := [Balance.Building.HOUSE, Balance.Building.FACTORY, Balance.Building.FACTORY,
+		Balance.Building.FACTORY, Balance.Building.BANK, Balance.Building.MILITARY_BASE,
+		Balance.Building.BARRIER]
 	var placed := 0
 	for dy in range(-1, 3):
 		for dx in range(-2, 3):

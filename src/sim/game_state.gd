@@ -107,7 +107,7 @@ func aggregate(player: int) -> Dictionary:
 	var coin_cap := Balance.BASE_COIN_CAP
 	var power_cap := Balance.BASE_POWER_CAP
 	var people := 0
-	var workers := 0
+	var jobs: Array = []   # [level, cell] for each building that needs staffing
 	for i in range(owner_of.size()):
 		if owner_of[i] != player:
 			continue
@@ -119,14 +119,37 @@ func aggregate(player: int) -> Dictionary:
 		# An upgrade multiplies what a building produces. The people it employs do not
 		# change, which is what makes upgrading the answer once land runs out.
 		var lvl := maxi(1, int(level_at[i]))
-		coin_per_tick += int(d["coin_per_tick"]) * lvl
 		power_per_tick += int(d["power_per_tick"]) * lvl
 		coin_cap += int(d["coin_cap"]) * lvl
 		power_cap += int(d["power_cap"]) * lvl
 		people += int(d["people"]) * lvl
-		workers += int(d["workers"])
-	# The flat base income is what keeps a one-cell player in the game, so it is tied
-	# to owning territory at all rather than to any building.
+		if int(d["workers"]) > 0:
+			jobs.append([lvl, i])
+		else:
+			coin_per_tick += int(d["coin_per_tick"]) * lvl
+
+	# Housing can vanish - losing a house to a capture takes its residents with it - so
+	# there may be more factories than people to work them. Rather than let the surplus
+	# keep producing out of nowhere, the workforce is handed out and whatever is left
+	# over stands idle. The biggest factories are staffed first, which is what a player
+	# would do, and ties break on cell index so both devices reach the same answer.
+	jobs.sort_custom(func(a, b): return a[0] > b[0] if a[0] != b[0] else a[1] < b[1])
+	var spare := people
+	var workers := 0
+	var idle := PackedInt32Array()
+	for job in jobs:
+		var cell := int(job[1])
+		var data: Dictionary = Balance.BUILDINGS[int(building_at[cell])]
+		var needed := int(data["workers"])
+		if spare < needed:
+			idle.append(cell)
+			continue
+		spare -= needed
+		workers += needed
+		coin_per_tick += int(data["coin_per_tick"]) * int(job[0])
+
+	# The flat base income is what keeps a one-cell player in the game, so it is tied to
+	# owning territory at all rather than to any building.
 	if cells > 0:
 		coin_per_tick += Balance.BASE_COIN_PER_TICK
 		power_per_tick += Balance.BASE_POWER_PER_TICK
@@ -138,7 +161,8 @@ func aggregate(player: int) -> Dictionary:
 		"power_cap": power_cap,
 		"people": people,
 		"workers": workers,
-		"free_people": people - workers,
+		"free_people": spare,
+		"idle_cells": idle,
 	}
 
 # --- Commands ---

@@ -69,6 +69,8 @@ const STRINGS := {
 	"people": {"ru": "жителей", "en": "residents"},
 	"barrier_stall": {"ru": "с задержки захвата у врага", "en": "s of stalled enemy captures"},
 	"cooldown": {"ru": "Перезарядка", "en": "Cooldown"},
+	"idle": {"ru": "без рабочих", "en": "with no workers"},
+	"idle_building": {"ru": "Стоит без рабочих", "en": "Standing idle: nobody to work it"},
 	"neutral_land": {"ru": "Ничья земля", "en": "Open ground"},
 	"empty_cell": {"ru": "Пусто", "en": "Empty"},
 	"your_cell": {"ru": "Ваша клетка", "en": "Your cell"},

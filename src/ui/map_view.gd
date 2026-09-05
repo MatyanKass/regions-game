@@ -102,14 +102,31 @@ func _draw_territory() -> void:
 			Ink.line(self, r.position + Vector2(0, CELL), r.position + Vector2(CELL, CELL), pen, 4.0)
 
 func _draw_buildings() -> void:
+	var idle := _idle_cells()
 	for i in range(state.building_at.size()):
 		var type := int(state.building_at[i])
 		if type == Balance.Building.NONE:
 			continue
 		var pen := Ink.pen_of(int(state.owner_of[i]))
 		var r := cell_rect(i)
-		Ink.draw_building(self, type, r.grow(-CELL * 0.18), pen, 3.0)
-		Ink.draw_level_pips(self, r, int(state.level_at[i]), pen)
+		var stopped := idle.has(i)
+		# A building with nobody in it is drawn faint: at a glance the working half of a
+		# region is solid and the stalled half is washed out.
+		var colour := Color(pen.r, pen.g, pen.b, 0.35) if stopped else pen
+		Ink.draw_building(self, type, r.grow(-CELL * 0.18), colour, 3.0)
+		Ink.draw_level_pips(self, r, int(state.level_at[i]), colour)
+		if stopped:
+			Ink.draw_idle_badge(self, r)
+
+# Which buildings are standing idle, for every player on the board. The simulation
+# decides; the map only asks, so what is greyed out and what actually earns can never
+# disagree.
+func _idle_cells() -> Dictionary:
+	var found: Dictionary = {}
+	for player in range(state.alive.size()):
+		for cell in state.aggregate(player)["idle_cells"]:
+			found[int(cell)] = true
+	return found
 
 func _draw_ships() -> void:
 	for ship in state.ships:
