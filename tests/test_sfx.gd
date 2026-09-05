@@ -49,6 +49,32 @@ func test_a_supplied_file_would_replace_the_generated_one() -> void:
 			"%s must resolve to a real stream or to nothing" % name)
 	expect(sfx.load_override("no_such_effect") == null,
 		"an effect nobody has supplied a file for resolves to nothing")
+	# Case is not part of the name: a file called Build.ogg is the build sound.
+	expect(sfx.load_override("BUILD") == sfx.load_override("build"),
+		"the lookup must ignore case, or a capital letter silently loses the file")
+	sfx.free()
+
+func test_supplied_files_actually_reach_the_player() -> void:
+	# Whatever is sitting in assets/sfx right now has to load. A file with the wrong
+	# extension for what is inside it - an Ogg named .mp3, say - would fail here rather
+	# than in someone's ears.
+	var sfx = load("res://src/ui/sfx.gd").new()
+	var dir := DirAccess.open(sfx.OVERRIDE_DIR)
+	if dir == null:
+		sfx.free()
+		return
+	for file in dir.get_files():
+		var clean := file.trim_suffix(".import")
+		var is_audio := false
+		for suffix in sfx.OVERRIDE_TYPES:
+			if clean.to_lower().ends_with(suffix):
+				is_audio = true
+		if not is_audio:
+			continue
+		var name := clean.substr(0, clean.rfind("."))
+		expect(sfx.RECIPES.has(name.to_lower()),
+			"%s does not match any effect name, so nothing will ever play it" % clean)
+		expect(sfx.load_override(name) != null, "%s failed to load" % clean)
 	sfx.free()
 
 func test_effects_are_short_enough_to_spam() -> void:

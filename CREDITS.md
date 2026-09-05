@@ -20,8 +20,13 @@ small; nothing else about them was changed.
 
 ## Sound effects
 
-None to credit: every effect is synthesised in code at startup by
-[src/ui/sfx.gd](src/ui/sfx.gd) - a pitch sweep, a voice and a decay envelope each.
+| File | Effect | Source |
+|---|---|---|
+| `assets/sfx/build.ogg` | a building goes up | supplied by MatyanKass |
+
+Everything else is synthesised in code at startup by [src/ui/sfx.gd](src/ui/sfx.gd) - a
+pitch sweep, a voice and a decay envelope each. Any of them can be replaced by dropping
+a file into [assets/sfx](assets/sfx); see the README there.
 
 ## Code and art
 

@@ -97,10 +97,12 @@ func _load_override(name: String) -> AudioStream:
 		return null
 	# The project folder lists both "build.ogg" and "build.ogg.import"; the exported one
 	# lists only the first. Stripping the sidecar suffix covers both.
+	# Matched without regard to case: somebody dropping in "Build.ogg" means the build
+	# sound, and having that quietly do nothing is a miserable way to lose an afternoon.
 	for file in dir.get_files():
 		var clean := file.trim_suffix(".import")
 		for suffix in OVERRIDE_TYPES:
-			if clean == name + suffix:
+			if clean.to_lower() == name.to_lower() + suffix:
 				var stream = load(OVERRIDE_DIR + "/" + clean)
 				if stream is AudioStream:
 					return stream
