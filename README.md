@@ -8,6 +8,9 @@ far shore. Last state standing wins, or the larger one after 40 minutes.
 
 Design notes (Russian): [Notes/Игра Regions.md](Notes/Игра%20Regions.md)
 
+Rules specification (Russian), complete enough to reimplement the game from:
+[Notes/MECHANICS.md](Notes/MECHANICS.md)
+
 ## Status - the MVP is playable
 
 | Milestone | State |
