@@ -422,33 +422,16 @@ func _set_tool(tool: int) -> void:
 		map_view.ship_targets = PackedInt32Array()
 	map_view.queue_redraw()
 
-# Highlights the shores this port can actually reach. The eight compass directions are
-# offered because those are the lines a player can read off the grid at a glance; the
-# rules themselves accept any straight line of open water.
+# Highlights every shore this port can reach. The simulation answers that question, so
+# what is highlighted and what is allowed can never drift apart.
 func _ship_targets(port_cell: int) -> PackedInt32Array:
 	var st := Net.state
+	if st == null:
+		return PackedInt32Array()
 	var found := PackedInt32Array()
-	if st == null or int(st.building_at[port_cell]) != Balance.Building.PORT:
-		return found
-	var directions := [
-		Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
-		Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
-	]
-	for dir in directions:
-		var x := port_cell % st.width
-		var y := port_cell / st.width
-		var crossed := 0
-		for step in range(1, maxi(st.width, st.height)):
-			x += dir.x
-			y += dir.y
-			if not st.in_bounds(x, y):
-				break
-			var cell := st.index_of(x, y)
-			if st.is_land(cell):
-				if crossed > 0 and int(st.owner_of[cell]) != Net.local_player:
-					found.append(cell)
-				break
-			crossed += 1
+	for cell in st.reachable_shores(port_cell):
+		if int(st.owner_of[cell]) != Net.local_player:
+			found.append(cell)
 	return found
 
 # --- Overlays --------------------------------------------------------------------

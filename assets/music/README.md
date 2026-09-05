@@ -10,4 +10,5 @@ when it ends. Empty folders mean silence, which is a valid state.
 
 Only tracks that are free to use commercially without attribution obligations we cannot
 meet. Pixabay Music, OpenGameArt (CC0) and Incompetech (CC-BY, requires crediting the
-author in-game) are the intended sources.
+author in-game) are the intended sources. What is in here now is listed in
+[CREDITS.md](../../CREDITS.md).

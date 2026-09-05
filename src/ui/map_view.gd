@@ -114,7 +114,12 @@ func _draw_ships() -> void:
 		var a := cell_rect(from_cell).get_center()
 		var b := cell_rect(to_cell).get_center()
 		var pen := Ink.pen_of(int(ship["owner"]))
-		draw_line(a, cell_rect(int(ship["target"])).get_center(), Color(pen.r, pen.g, pen.b, 0.3), 2.0)
+		# The wake is the route still to sail, which now bends round headlands.
+		var wake := PackedVector2Array([a])
+		for i in range(step, path.size()):
+			wake.append(cell_rect(path[i]).get_center())
+		if wake.size() > 1:
+			draw_polyline(wake, Color(pen.r, pen.g, pen.b, 0.3), 2.0)
 		Ink.draw_ship(self, a.lerp(b, progress), CELL * 0.5, pen, 3.0)
 
 func _draw_focus_marker(cell: int) -> void:

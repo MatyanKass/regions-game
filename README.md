@@ -16,11 +16,9 @@ Design notes (Russian): [Notes/Игра Regions.md](Notes/Игра%20Regions.md)
 | M1 — map rendering, pan/zoom, notebook look | done |
 | M2 — build menu, capture, demolition, ports and ships | done |
 | M3 — LAN lobby, lockstep, pause on disconnect, desync resync | done |
-| M4 — win screen, RU/EN interface, Android build, music system | done |
+| M4 — win screen, RU/EN interface, Android build, music | done |
 
-Not in yet: the music files themselves (the player that switches calm and combat tracks
-is in place - see [assets/music/README.md](assets/music/README.md)), an app icon, and a
-practice mode against a bot.
+Not in yet: an app icon of our own, and a practice mode against a bot.
 
 ## Playing it
 
@@ -28,7 +26,8 @@ practice mode against a bot.
 2. One player taps **Создать комнату**. The other sees the room in the list and taps it.
    If the network eats broadcast traffic, type the host's address instead.
 3. Tap your own cell to build, double-tap a bordering cell to take it, tap a port to
-   send its ship. The match ends when one side has no cells left, or after 40 minutes.
+   send its ship - it finds its own way round headlands. The match ends when one side
+   has no cells left, or after 40 minutes.
 
 ## Layout
 

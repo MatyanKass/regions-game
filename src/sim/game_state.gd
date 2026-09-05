@@ -240,45 +240,88 @@ func _do_launch_ship(player: int, port_cell: int, target: int) -> String:
 	})
 	return ""
 
-# Ships sail in a straight line only. That keeps the rule readable on a phone screen
-# (the ship goes where you point it) and the path trivially deterministic.
-# Returns the cells from the port (exclusive) to the target (inclusive), or an empty
-# array if the line is not open water the whole way.
+# Ships follow the water. A breadth-first search from the port over sea cells finds the
+# shortest way round a headland, so a bay never blocks a landing that is obviously
+# possible on the screen.
+#
+# Neighbours are always walked in the same order, which makes the shortest path a single
+# defined answer rather than one of several - the sim would desync otherwise.
+# Returns the cells from the port (exclusive) to the target (inclusive), empty if the
+# target cannot be reached by sea.
 func sea_path(from: int, to: int) -> PackedInt32Array:
 	var empty := PackedInt32Array()
-	if from == to:
+	if from == to or not is_land(to):
 		return empty
-	var x0 := from % width
-	var y0 := from / width
-	var x1 := to % width
-	var y1 := to / width
-	var dx := absi(x1 - x0)
-	var dy := -absi(y1 - y0)
-	var sx := 1 if x0 < x1 else -1
-	var sy := 1 if y0 < y1 else -1
-	var err := dx + dy
+	var total := owner_of.size()
+	var came_from := PackedInt32Array()
+	came_from.resize(total)
+	came_from.fill(-1)
+	var seen := PackedByteArray()
+	seen.resize(total)
+	seen.fill(0)
+	seen[from] = 1
+	var queue := PackedInt32Array([from])
+	var head := 0
+	while head < queue.size():
+		var cell := queue[head]
+		head += 1
+		for n in neighbours(cell):
+			if seen[n] == 1:
+				continue
+			# The target counts only when we arrive from open water: a ship has to
+			# actually cross something, it is not a way to step onto the next cell.
+			if n == to:
+				if cell == from:
+					continue
+				came_from[n] = cell
+				return _trace_path(came_from, from, to)
+			if terrain[n] != WorldGen.SEA:
+				continue
+			seen[n] = 1
+			came_from[n] = cell
+			queue.append(n)
+	return empty
+
+func _trace_path(came_from: PackedInt32Array, from: int, to: int) -> PackedInt32Array:
+	var reversed := PackedInt32Array()
+	var cell := to
+	while cell != from and cell >= 0:
+		reversed.append(cell)
+		cell = came_from[cell]
 	var path := PackedInt32Array()
-	var x := x0
-	var y := y0
-	var sea_cells := 0
-	while true:
-		var e2 := 2 * err
-		if e2 >= dy:
-			err += dy
-			x += sx
-		if e2 <= dx:
-			err += dx
-			y += sy
-		var cell := x + y * width
-		path.append(cell)
-		if cell == to:
-			break
-		if terrain[cell] != WorldGen.SEA:
-			return empty
-		sea_cells += 1
-	if sea_cells == 0:
-		return empty
+	for i in range(reversed.size() - 1, -1, -1):
+		path.append(reversed[i])
 	return path
+
+# Every shore this port can put a ship on. One search answers it for the whole map, so
+# the interface can highlight the real options instead of guessing at them.
+func reachable_shores(port_cell: int) -> PackedInt32Array:
+	var found := PackedInt32Array()
+	if building_at[port_cell] != Balance.Building.PORT:
+		return found
+	var total := owner_of.size()
+	var seen := PackedByteArray()
+	seen.resize(total)
+	seen.fill(0)
+	seen[port_cell] = 1
+	var queue := PackedInt32Array()
+	for n in neighbours(port_cell):
+		if terrain[n] == WorldGen.SEA:
+			seen[n] = 1
+			queue.append(n)
+	var head := 0
+	while head < queue.size():
+		var cell := queue[head]
+		head += 1
+		for n in neighbours(cell):
+			if seen[n] == 1:
+				continue
+			seen[n] = 1
+			if terrain[n] == WorldGen.SEA:
+				queue.append(n)
+			else:
+				found.append(n)
+	return found
 
 func _drop_ships_from_port(port_cell: int) -> void:
 	var kept: Array[Dictionary] = []

@@ -18,7 +18,7 @@ var _mood := ""
 
 func _ready() -> void:
 	for mood in FOLDERS:
-		_tracks[mood] = _load_folder(str(FOLDERS[mood]))
+		_tracks[mood] = load_folder(str(FOLDERS[mood]))
 		var player := AudioStreamPlayer.new()
 		player.volume_db = QUIET_DB
 		player.bus = "Master"
@@ -26,20 +26,25 @@ func _ready() -> void:
 		add_child(player)
 		_players[mood] = player
 
-func _load_folder(path: String) -> Array:
+func load_folder(path: String) -> Array:
 	var found: Array = []
 	var dir := DirAccess.open(path)
 	if dir == null:
 		return found
+	# A project folder holds both "track.ogg" and "track.ogg.import" while an exported
+	# one holds only the imported name, so names are collected first and de-duplicated
+	# before anything is loaded - otherwise every track would be added twice.
+	var names: Dictionary = {}
 	for file in dir.get_files():
-		# Exported projects see the imported name, so the suffix has to be stripped.
 		var clean := file.trim_suffix(".import")
-		if not (clean.ends_with(".ogg") or clean.ends_with(".mp3") or clean.ends_with(".wav")):
-			continue
-		var stream = load(path + "/" + clean)
+		if clean.ends_with(".ogg") or clean.ends_with(".mp3") or clean.ends_with(".wav"):
+			names[clean] = true
+	var sorted := names.keys()
+	sorted.sort()
+	for name in sorted:
+		var stream = load(path + "/" + str(name))
 		if stream != null:
 			found.append(stream)
-	found.sort_custom(func(a, b): return str(a.resource_path) < str(b.resource_path))
 	return found
 
 func set_mood(mood: String) -> void:

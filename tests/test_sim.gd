@@ -193,11 +193,61 @@ func test_ship_crosses_the_sea_and_takes_the_cell() -> void:
 	expect_eq(s.ships.size(), 0, "the ship is gone once it lands")
 	expect_eq(int(s.owner_of[target]), 0, "the landing captured the target cell")
 
-func test_ship_cannot_sail_over_land() -> void:
+func test_ship_needs_water_not_just_a_neighbour() -> void:
 	var s := GameState.create(7)
-	var home := _home_of(s, 0)
-	var neighbour := _land_neighbour(s, home)
-	expect(s.sea_path(home, neighbour).is_empty(), "a route with no water is not a sea route")
+	var inland := -1
+	for i in range(s.owner_of.size()):
+		# A cell whose whole neighbourhood is dry can never be a landing site.
+		if s.is_land(i) and not s.touches_sea(i):
+			var dry := true
+			for n in s.neighbours(i):
+				if s.touches_sea(n):
+					dry = false
+			if dry:
+				inland = i
+				break
+	expect(inland >= 0, "seed 7 should contain a cell well away from any water")
+	if inland < 0:
+		return
+	var route := _find_sea_route(s, 0)
+	if route.is_empty():
+		return
+	expect(s.sea_path(int(route["port"]), inland).is_empty(),
+		"a landlocked cell cannot be reached by ship")
+
+func test_ship_sails_round_a_headland() -> void:
+	# A one-cell isthmus: the straight line between the two shores crosses dry land, so
+	# only a route that follows the water can connect them.
+	var s := GameState.create(7)
+	s.terrain.fill(WorldGen.SEA)
+	var w := s.width
+	for y in range(s.height):
+		s.terrain[s.index_of(5, y)] = WorldGen.LAND
+	s.terrain[s.index_of(5, 0)] = WorldGen.SEA
+	var port_cell := s.index_of(5, 6)
+	var target := s.index_of(5, 10)
+	s.owner_of[port_cell] = 0
+	s.building_at[port_cell] = Balance.Building.PORT
+	var path := s.sea_path(port_cell, target)
+	expect(not path.is_empty(), "the ship should find its way round the gap")
+	expect(path.size() > 4, "the route has to be longer than the blocked straight line")
+	expect_eq(path[path.size() - 1], target, "the route ends on the target")
+	for i in range(path.size() - 1):
+		expect_eq(int(s.terrain[path[i]]), WorldGen.SEA, "every step before the landing is water")
+
+func test_reachable_shores_matches_what_is_allowed() -> void:
+	var s := _state_with_coins(7, 500 * Balance.UNIT)
+	var route := _find_sea_route(s, 0)
+	if route.is_empty():
+		return
+	var port_cell := int(route["port"])
+	s.owner_of[port_cell] = 0
+	s.building_at[port_cell] = Balance.Building.PORT
+	var shores := s.reachable_shores(port_cell)
+	expect(shores.size() > 0, "a port on open water reaches at least one shore")
+	for cell in shores:
+		expect(not s.sea_path(port_cell, cell).is_empty(),
+			"every highlighted shore must really have a route")
 
 # --- Determinism ---
 
@@ -304,32 +354,18 @@ func _coastal_cell(s: GameState, player: int) -> int:
 			return i
 	return -1
 
-# Looks for a coastal cell with a straight open-water line to land on another shore.
-# Only the eight compass directions are walked: for those, a straight walk is exactly
-# what sea_path() computes, and it keeps the search cheap enough to run every time.
+# Finds a coastal cell with somewhere to sail to, using the simulation's own routing.
 func _find_sea_route(s: GameState, player: int) -> Dictionary:
-	var directions := [
-		Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
-		Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
-	]
 	for from in range(s.owner_of.size()):
 		if not s.is_land(from) or not s.touches_sea(from):
 			continue
-		for dir in directions:
-			var x := from % s.width
-			var y := from / s.width
-			var crossed := 0
-			for step in range(1, 14):
-				x += dir.x
-				y += dir.y
-				if not s.in_bounds(x, y):
-					break
-				var cell := s.index_of(x, y)
-				if s.is_land(cell):
-					if crossed > 0 and s.owner_of[cell] == GameState.NEUTRAL:
-						return {"port": from, "target": cell}
-					break
-				crossed += 1
+		var was := int(s.building_at[from])
+		s.building_at[from] = Balance.Building.PORT
+		var shores := s.reachable_shores(from)
+		s.building_at[from] = was
+		for cell in shores:
+			if s.owner_of[cell] == GameState.NEUTRAL and cell != from:
+				return {"port": from, "target": cell}
 	return {}
 
 func _first_capturable(s: GameState, player: int) -> int:
