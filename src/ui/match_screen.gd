@@ -47,6 +47,9 @@ var _moved := false
 var _pinch_distance := 0.0
 var _toast_left := 0.0
 var _mood_timer := 0.0
+# Watched so that losing ground can be heard, however it was lost: an enemy capture
+# and a ship landing both simply take a cell away.
+var _known_cells := -1
 
 func _ready() -> void:
 	map_view = MapView.new()
@@ -65,7 +68,8 @@ func _ready() -> void:
 
 	Net.match_advanced.connect(_on_advanced)
 	Net.match_finished.connect(_on_finished)
-	Net.command_refused.connect(_show_toast)
+	Net.command_refused.connect(_on_refused)
+	Net.command_applied.connect(_on_command_applied)
 	Net.opponent_disconnected.connect(_on_opponent_disconnected)
 	Net.connection_lost.connect(_on_connection_lost)
 	Net.pause_changed.connect(_on_pause_changed)
@@ -314,10 +318,33 @@ func _in_contact() -> bool:
 				return true
 	return false
 
+# Only the local player's own actions are announced. Hearing every move the opponent
+# makes across the whole map would be noise; losing a cell is the exception, and that is
+# noticed by watching the count rather than by listening to their commands.
+func _on_command_applied(player: int, type: int, _a: int, _b: int) -> void:
+	if player != Net.local_player:
+		return
+	match type:
+		GameState.Command.BUILD:
+			Sfx.play("build")
+		GameState.Command.UPGRADE:
+			Sfx.play("upgrade")
+		GameState.Command.DEMOLISH:
+			Sfx.play("demolish")
+		GameState.Command.CAPTURE:
+			Sfx.play("capture")
+		GameState.Command.LAUNCH_SHIP:
+			Sfx.play("ship")
+
+func _on_refused(text: String) -> void:
+	Sfx.play("denied")
+	_show_toast(text)
+
 func _on_advanced() -> void:
 	map_view.state = Net.state
 	map_view.queue_redraw()
 	_refresh_stats()
+	_watch_for_losses()
 	if _build_menu.visible and map_view.selected >= 0:
 		_build_menu.refresh(Net.state, Net.local_player, map_view.selected)
 	if _cell_menu.visible and map_view.selected >= 0:
@@ -327,6 +354,12 @@ func _on_advanced() -> void:
 			_cell_menu.visible = false
 		else:
 			_cell_menu.show_cell(Net.state, Net.local_player, map_view.selected)
+
+func _watch_for_losses() -> void:
+	var cells := int(Net.state.aggregate(Net.local_player)["cells"])
+	if _known_cells >= 0 and cells < _known_cells:
+		Sfx.play("lost_cell")
+	_known_cells = cells
 
 func _refresh_stats() -> void:
 	var st := Net.state
@@ -551,6 +584,7 @@ func _on_finished() -> void:
 	elif st.winner >= 0:
 		text = I18n.t("defeat")
 	_overlay_text.text = text
+	Sfx.play("victory" if st.winner == Net.local_player else "defeat")
 	_clear_overlay_actions()
 	_add_overlay_action(I18n.t("back_to_menu"), func(): emit_signal("exit_requested"))
 	_overlay.visible = true

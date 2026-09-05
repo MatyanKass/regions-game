@@ -18,9 +18,23 @@ Design notes (Russian): [Notes/Игра Regions.md](Notes/Игра%20Regions.md)
 | M3 — LAN lobby, lockstep, pause on disconnect, desync resync | done |
 | M4 — win screen, RU/EN interface, Android build, music | done |
 | M5 — action modes, upgrades, barriers, hand-drawn interface | done |
+| M6 — app icon, sound effects, more music, Windows build | done |
 | M5 — practice match against a bot, three difficulties | done |
 
-Not in yet: an app icon of our own.
+Sound effects are synthesised in code at startup rather than shipped as files, so
+retuning one is editing a number. Music is picked at random from
+[assets/music](assets/music); calm while the two territories are apart, tense from the
+moment they touch.
+
+## Running it on a PC
+
+    powershell -File toolsun.ps1              # the lobby, same as on a phone
+    powershell -File toolsun.ps1 -Practice    # straight into a match against the bot
+    powershell -File toolsuild_windows.ps1    # a standalone build\Regions.exe
+
+The desktop build is the same game, mouse instead of finger: drag to pan, wheel to zoom,
+click where you would tap. A PC can host a room that phones join, which is the easiest
+way to test a match.
 
 ## Playing it
 

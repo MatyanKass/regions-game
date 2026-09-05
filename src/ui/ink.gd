@@ -44,9 +44,12 @@ static func pen_of(player: int) -> Color:
 
 # --- Hand drawn strokes -----------------------------------------------------------
 
-const SEGMENTS := 4
-const WOBBLE := 0.055     # share of a stroke's length it may drift sideways
-const WOBBLE_MAX := 2.6   # never more than this many pixels, or short strokes go silly
+# Kept deliberately slight. The point is that the shapes look drawn rather than printed,
+# not that they look shaky: at a glance a building has to be recognisable first and
+# charming second, and a phone screen is small.
+const SEGMENTS := 3
+const WOBBLE := 0.016     # share of a stroke's length it may drift sideways
+const WOBBLE_MAX := 1.0   # never more than this many pixels
 
 # Repeatable noise in -1..1 from an integer. Deliberately not SimRng: this is decoration
 # and must never be mistaken for something the simulation depends on.
@@ -62,6 +65,10 @@ static func _seed_of(a: Vector2, b: Vector2) -> int:
 		+ int(b.x * 7.0) * 283923481 + int(b.y * 7.0)
 
 static func line(ci: CanvasItem, a: Vector2, b: Vector2, c: Color, w: float) -> void:
+	# A stroke with no length would become a polyline of identical points, which the
+	# renderer cannot work out a direction for.
+	if a.distance_squared_to(b) < 0.25:
+		return
 	ci.draw_polyline(_stroke(a, b), c, w)
 
 # One pen stroke: the ends stay put so shapes still meet at their corners, and the middle
@@ -101,12 +108,12 @@ static func rect(ci: CanvasItem, r: Rect2, c: Color, w: float) -> void:
 
 # A circle drawn as a ring of wobbly chords rather than a perfect arc.
 static func circle(ci: CanvasItem, centre: Vector2, radius: float, c: Color, w: float,
-		steps: int = 14) -> void:
+		steps: int = 20) -> void:
 	var points := PackedVector2Array()
 	var seed_value := int(centre.x * 7.0) * 40503 + int(centre.y * 7.0) * 39119 + int(radius * 7.0)
 	for i in range(steps):
 		var angle := TAU * float(i) / float(steps)
-		var wobble := 1.0 + noise_at(seed_value + i) * 0.05
+		var wobble := 1.0 + noise_at(seed_value + i) * 0.02
 		points.append(centre + Vector2(cos(angle), sin(angle)) * radius * wobble)
 	poly(ci, points, c, w, true)
 
@@ -117,7 +124,7 @@ static func arc(ci: CanvasItem, centre: Vector2, radius: float, from_deg: float,
 	for i in range(steps + 1):
 		var t := float(i) / float(steps)
 		var angle := deg_to_rad(lerpf(from_deg, to_deg, t))
-		var wobble := 1.0 + noise_at(seed_value + i) * 0.04
+		var wobble := 1.0 + noise_at(seed_value + i) * 0.02
 		points.append(centre + Vector2(cos(angle), sin(angle)) * radius * wobble)
 	poly(ci, points, c, w, false)
 
@@ -251,32 +258,27 @@ static func _port(ci: CanvasItem, r: Rect2, c: Color, w: float) -> void:
 	circle(ci, Vector2(cx, y + sh * 0.2), sw * 0.12, c, w, 10)
 	arc(ci, Vector2(cx, y + sh * 0.55), sw * 0.34, 20, 160, c, w, 8)
 
-# A hurdle fence: four leaning posts with panels hung between them at different heights,
-# so it reads as knocked together rather than as a neat wall. From the sketch.
+# A hurdle fence: four upright posts with a panel hung between each pair, every panel at
+# a slightly different height. Straight posts read far better at cell size than leaning
+# ones did, and the staggered panels are what make it a fence and not a table.
 static func _barrier(ci: CanvasItem, r: Rect2, c: Color, w: float) -> void:
 	var x := r.position.x
 	var y := r.position.y
 	var sw := r.size.x
 	var sh := r.size.y
-	var top_y := y + sh * 0.14
-	var bottom_y := y + sh * 0.92
-	# Each post leans: the pair is where it starts at the top and where it ends up.
-	var posts := [Vector2(0.16, 0.22), Vector2(0.40, 0.34), Vector2(0.64, 0.34),
-		Vector2(0.88, 0.80)]
-	for post in posts:
-		line(ci, Vector2(x + sw * post.x, top_y), Vector2(x + sw * post.y, bottom_y), c, w)
-	# Rails, hung at a different height in each bay.
-	var bays := [Vector2(0.36, 0.74), Vector2(0.22, 0.58), Vector2(0.38, 0.76)]
-	for i in range(bays.size()):
-		var bay: Vector2 = bays[i]
-		for edge in [bay.x, bay.y]:
-			var rail_y: float = y + sh * float(edge)
-			var t := clampf((rail_y - top_y) / (bottom_y - top_y), 0.0, 1.0)
-			var left: Vector2 = posts[i]
-			var right: Vector2 = posts[i + 1]
-			line(ci,
-				Vector2(x + sw * lerpf(left.x, left.y, t), rail_y),
-				Vector2(x + sw * lerpf(right.x, right.y, t), rail_y), c, w)
+	var columns := [0.14, 0.38, 0.62, 0.86]
+	for column in columns:
+		var cx: float = x + sw * float(column)
+		line(ci, Vector2(cx, y + sh * 0.14), Vector2(cx, y + sh * 0.90), c, w)
+	# Top and bottom rail of each panel, as a fraction of the height.
+	var panels := [Vector2(0.32, 0.68), Vector2(0.22, 0.58), Vector2(0.36, 0.72)]
+	for i in range(panels.size()):
+		var panel: Vector2 = panels[i]
+		var left: float = x + sw * float(columns[i])
+		var right: float = x + sw * float(columns[i + 1])
+		for edge in [panel.x, panel.y]:
+			var ry: float = y + sh * float(edge)
+			line(ci, Vector2(left, ry), Vector2(right, ry), c, w)
 
 # --- Interface icons, drawn the same way, so nothing on screen looks imported -------
 

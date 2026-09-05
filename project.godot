@@ -9,6 +9,7 @@ config/name="Regions"
 config/description="Notebook-style 2D grid strategy for two players over LAN."
 config/features=PackedStringArray("4.7", "GL Compatibility")
 run/main_scene="res://src/ui/main.tscn"
+config/icon="res://assets/icon/icon.png"
 
 [autoload]
 
@@ -18,6 +19,9 @@ Net="*res://src/net/net_match.gd"
 
 ; Background music. Silent until tracks are dropped into assets/music.
 Music="*res://src/ui/music.gd"
+
+; Sound effects, synthesised at startup rather than loaded from files.
+Sfx="*res://src/ui/sfx.gd"
 
 [display]
 

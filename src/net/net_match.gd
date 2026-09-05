@@ -18,6 +18,9 @@ signal match_started
 signal match_advanced
 signal match_finished
 signal command_refused(reason: String)
+# Emitted for every command the rules accepted, on both sides, so the interface can
+# react to what really happened rather than to what was asked for.
+signal command_applied(player: int, type: int, a: int, b: int)
 signal opponent_disconnected
 signal connection_lost(reason: String)
 signal pause_changed(paused: bool)
@@ -265,6 +268,8 @@ func _run_tick(batch: PackedInt32Array, report_refusals: bool) -> void:
 		var player := batch[i]
 		var cmd := GameState.make_command(batch[i + 1], batch[i + 2], batch[i + 3])
 		var reason := state.apply_command(player, cmd)
+		if reason.is_empty():
+			emit_signal("command_applied", player, batch[i + 1], batch[i + 2], batch[i + 3])
 		if report_refusals and not reason.is_empty():
 			if player == local_player:
 				emit_signal("command_refused", I18n.reason(reason))

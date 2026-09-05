@@ -5,6 +5,7 @@ var _screen: Node = null
 var _screenshot_path := ""
 var _shot_countdown := 45
 var _shot_attack := false
+var _icon_dir := ""
 
 func _ready() -> void:
 	I18n.detect_language()
@@ -18,6 +19,11 @@ func _ready() -> void:
 			_screenshot_path = arg.substr(7)
 		if arg == "--shot-attack":
 			_shot_attack = true
+		if arg.begins_with("--icons="):
+			_icon_dir = arg.substr(8)
+	if not _icon_dir.is_empty():
+		_render_icons()
+		return
 	if args.has("--preview") or not _screenshot_path.is_empty():
 		Net.start_solo(20260905)
 		_stock_preview()
@@ -28,6 +34,44 @@ func _ready() -> void:
 		Net.start_practice(BotPlayer.Level.HARD, 20260905)
 		return
 	_open_lobby()
+
+# Renders the app icon from the same Ink strokes the game draws with, so the icon can
+# never drift away from how the game actually looks. Run by tools/make_icons.ps1; a real
+# window is needed because a headless renderer hands back an empty texture.
+func _render_icons() -> void:
+	DirAccess.make_dir_recursive_absolute(_icon_dir)
+	# The launcher crops an adaptive icon to roughly the middle two thirds, so that one
+	# is drawn smaller and over a transparent background.
+	await _render_icon(512, "%s/icon.png" % _icon_dir, false, 0.06)
+	await _render_icon(432, "%s/icon_adaptive_foreground.png" % _icon_dir, true, 0.24)
+	await _render_icon(432, "%s/icon_adaptive_background.png" % _icon_dir, false, 0.5)
+	_downscale("%s/icon.png" % _icon_dir, "%s/icon_192.png" % _icon_dir, 192)
+	print("ICONS written to ", _icon_dir)
+	get_tree().quit(0)
+
+func _render_icon(px: int, path: String, transparent: bool, inset: float) -> void:
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(px, px)
+	viewport.transparent_bg = transparent
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	var art := IconArt.new()
+	art.size = Vector2(px, px)
+	art.transparent = transparent
+	art.inset = inset
+	viewport.add_child(art)
+	add_child(viewport)
+	# Two frames: one to lay the control out, one to actually draw it.
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	viewport.get_texture().get_image().save_png(path)
+	viewport.queue_free()
+
+func _downscale(from_path: String, to_path: String, px: int) -> void:
+	var image := Image.load_from_file(from_path)
+	if image == null:
+		return
+	image.resize(px, px, Image.INTERPOLATE_LANCZOS)
+	image.save_png(to_path)
 
 # Preview mode only: hand the player a small built-up region so the screenshot shows
 # what a match actually looks like instead of one empty cell.

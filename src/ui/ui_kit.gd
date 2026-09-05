@@ -63,6 +63,10 @@ static func panel(node: Control, bg: Color = Ink.PAPER_PANEL) -> void:
 # Buttons are paper tiles that press in: the border darkens and the fill sinks a shade,
 # which is enough feedback on a phone without any animation.
 static func button(node: Button, accent: Color = Ink.INK, filled: bool = false) -> void:
+	# Connected here rather than at every call site, so no button can be built without
+	# its click. `button()` is also called again to restyle a button, hence the guard.
+	if not node.pressed.is_connected(_click):
+		node.pressed.connect(_click)
 	var bg := accent if filled else Ink.PAPER_PANEL
 	var fg := Ink.PAPER if filled else Ink.INK
 	node.add_theme_stylebox_override("normal", box(bg, accent, BORDER, RADIUS, 10))
@@ -75,6 +79,9 @@ static func button(node: Button, accent: Color = Ink.INK, filled: bool = false) 
 	node.add_theme_color_override("font_hover_color", fg)
 	node.add_theme_color_override("font_pressed_color", fg)
 	node.add_theme_color_override("font_disabled_color", Ink.INK_SOFT)
+
+static func _click() -> void:
+	Sfx.play("tap")
 
 static func heading(text: String, px: int = 20, colour: Color = Ink.INK) -> Label:
 	var label := Label.new()
