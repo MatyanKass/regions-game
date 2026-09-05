@@ -370,6 +370,45 @@ func _check_end() -> void:
 				tied = true
 		winner = -1 if tied else best
 
+# --- Snapshots: the host's answer to a client that has drifted out of step. ---
+
+func snapshot() -> Dictionary:
+	var ship_copy: Array[Dictionary] = []
+	for ship in ships:
+		ship_copy.append(ship.duplicate(true))
+	return {
+		"seed": map_seed,
+		"terrain": terrain.duplicate(),
+		"owner": owner_of.duplicate(),
+		"building": building_at.duplicate(),
+		"coins": coins.duplicate(),
+		"power": power.duplicate(),
+		"alive": alive.duplicate(),
+		"ships": ship_copy,
+		"tick": tick_count,
+		"finished": finished,
+		"winner": winner,
+	}
+
+static func from_snapshot(data: Dictionary) -> GameState:
+	var s := GameState.new()
+	s.map_seed = int(data["seed"])
+	s.width = Balance.MAP_WIDTH
+	s.height = Balance.MAP_HEIGHT
+	s.terrain = data["terrain"]
+	s.owner_of = data["owner"]
+	s.building_at = data["building"]
+	s.coins = data["coins"]
+	s.power = data["power"]
+	s.alive = data["alive"]
+	s.ships = []
+	for ship in data["ships"]:
+		s.ships.append((ship as Dictionary).duplicate(true))
+	s.tick_count = int(data["tick"])
+	s.finished = bool(data["finished"])
+	s.winner = int(data["winner"])
+	return s
+
 # --- Desync detection: FNV-1a over everything that defines the state. ---
 
 func state_hash() -> int:

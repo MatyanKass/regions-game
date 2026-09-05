@@ -217,6 +217,36 @@ func test_two_runs_of_the_same_commands_match() -> void:
 		if a.finished:
 			break
 
+func test_snapshot_round_trip() -> void:
+	var s := _state_with_coins(31, 300 * Balance.UNIT)
+	s.power[0] = 60 * Balance.UNIT
+	var home := _home_of(s, 0)
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, home, Balance.Building.HOUSE))
+	s.apply_command(0, GameState.make_command(GameState.Command.CAPTURE, _land_neighbour(s, home)))
+	for i in range(25):
+		s.tick()
+	var copy := GameState.from_snapshot(s.snapshot())
+	expect_eq(copy.state_hash(), s.state_hash(), "a restored snapshot must be the same state")
+	# And it must keep behaving the same, not merely look the same right now.
+	for i in range(50):
+		s.tick()
+		copy.tick()
+	expect_eq(copy.state_hash(), s.state_hash(), "a restored snapshot must keep running in step")
+
+func test_snapshot_carries_ships() -> void:
+	var s := _state_with_coins(7, 500 * Balance.UNIT)
+	s.power[0] = 100 * Balance.UNIT
+	var route := _find_sea_route(s, 0)
+	if route.is_empty():
+		return
+	var port_cell := int(route["port"])
+	s.owner_of[port_cell] = 0
+	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, port_cell, Balance.Building.PORT))
+	s.apply_command(0, GameState.make_command(GameState.Command.LAUNCH_SHIP, port_cell, int(route["target"])))
+	var copy := GameState.from_snapshot(s.snapshot())
+	expect_eq(copy.ships.size(), 1, "the ship survives the snapshot")
+	expect_eq(copy.state_hash(), s.state_hash(), "a state with a ship at sea round-trips")
+
 func test_hash_notices_a_difference() -> void:
 	var a := GameState.create(99)
 	var b := GameState.create(99)

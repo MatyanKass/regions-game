@@ -8,6 +8,13 @@ config_version=5
 config/name="Regions"
 config/description="Notebook-style 2D grid strategy for two players over LAN."
 config/features=PackedStringArray("4.7", "GL Compatibility")
+run/main_scene="res://src/ui/main.tscn"
+
+[autoload]
+
+; The connection, the match clock and the shared simulation. Autoloaded so that both
+; devices address it by the same node path, which is what Godot RPCs require.
+Net="*res://src/net/net_match.gd"
 
 [display]
 
@@ -20,3 +27,8 @@ window/stretch/aspect="expand"
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+
+[input_devices]
+
+; One code path for taps on a phone and clicks on a desktop during development.
+pointing/emulate_touch_from_mouse=true
