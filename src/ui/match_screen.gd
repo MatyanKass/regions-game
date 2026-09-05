@@ -388,6 +388,11 @@ func _show_own_cell(cell: int) -> void:
 		_side.visible = false)
 	_side.visible = true
 
+# In a practice match the other seat is the bot, and saying so is the difference between
+# "the opponent is quiet" and "the bot is thinking".
+func _opponent_name() -> String:
+	return I18n.t("bot") if Net.bot != null else I18n.t("opponent")
+
 func _show_foreign_cell(cell: int) -> void:
 	var st := Net.state
 	var me := Net.local_player
@@ -398,7 +403,7 @@ func _show_foreign_cell(cell: int) -> void:
 	else:
 		var agg := st.aggregate(owner_id)
 		var per_second := float(Balance.TICKS_PER_SECOND) / float(Balance.UNIT)
-		lines.append(I18n.t("opponent"))
+		lines.append(_opponent_name())
 		lines.append("%s: %d" % [I18n.t("cells"), int(agg["cells"])])
 		lines.append("%s: %.1f C/s, %.1f P/s" % [I18n.t("income"),
 			float(agg["coin_per_tick"]) * per_second, float(agg["power_per_tick"]) * per_second])
@@ -459,7 +464,7 @@ func _on_finished() -> void:
 	_overlay.visible = true
 
 func _on_opponent_disconnected() -> void:
-	_overlay_text.text = I18n.t("opponent_lost") % I18n.t("opponent")
+	_overlay_text.text = I18n.t("opponent_lost") % _opponent_name()
 	_clear_overlay_actions()
 	_add_overlay_action(I18n.t("keep_waiting"), func(): _overlay.visible = false)
 	_add_overlay_action(I18n.t("end_match"), func(): emit_signal("exit_requested"))

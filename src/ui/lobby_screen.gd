@@ -3,10 +3,14 @@
 class_name LobbyScreen
 extends Control
 
+# The chosen difficulty survives a language switch, which rebuilds this screen.
+static var bot_level: int = BotPlayer.Level.NORMAL
+
 var _status: Label
 var _rooms_box: VBoxContainer
 var _address: LineEdit
 var _language_button: Button
+var _level_button: OptionButton
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -29,6 +33,24 @@ func _ready() -> void:
 	title.add_theme_font_size_override("font_size", 44)
 	title.add_theme_color_override("font_color", Ink.INK)
 	centre.add_child(title)
+
+	# Practice comes first: it is the one thing a player alone with the phone can do.
+	var practice_row := HBoxContainer.new()
+	practice_row.add_theme_constant_override("separation", 8)
+	var practice_button := Button.new()
+	practice_button.text = I18n.t("practice")
+	practice_button.custom_minimum_size.y = 48
+	practice_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	practice_button.pressed.connect(_on_practice)
+	practice_row.add_child(practice_button)
+	_level_button = OptionButton.new()
+	_level_button.tooltip_text = I18n.t("difficulty")
+	for level in [BotPlayer.Level.EASY, BotPlayer.Level.NORMAL, BotPlayer.Level.HARD]:
+		_level_button.add_item(I18n.bot_level_name(level), level)
+	_level_button.select(_level_button.get_item_index(bot_level))
+	_level_button.item_selected.connect(func(index: int): bot_level = _level_button.get_item_id(index))
+	practice_row.add_child(_level_button)
+	centre.add_child(practice_row)
 
 	var host_button := Button.new()
 	host_button.text = I18n.t("host_game")
@@ -72,6 +94,9 @@ func _ready() -> void:
 	Music.set_mood("calm")
 	Net.browse_rooms()
 	_refresh_rooms()
+
+func _on_practice() -> void:
+	Net.start_practice(bot_level)
 
 func _on_host() -> void:
 	if Net.host_room(_default_room_name()):

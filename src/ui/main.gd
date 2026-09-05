@@ -19,6 +19,11 @@ func _ready() -> void:
 		Net.start_solo(20260905)
 		_stock_preview()
 		return
+	# Straight into a practice match, for looking at the bot play without tapping through
+	# the lobby first.
+	if args.has("--practice"):
+		Net.start_practice(BotPlayer.Level.HARD, 20260905)
+		return
 	_open_lobby()
 
 # Preview mode only: hand the player a small built-up region so the screenshot shows

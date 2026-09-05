@@ -2,7 +2,7 @@
 # test is just adding a method.
 extends SceneTree
 
-const SUITES := ["res://tests/test_sim.gd", "res://tests/test_music.gd"]
+const SUITES := ["res://tests/test_sim.gd", "res://tests/test_bot.gd", "res://tests/test_music.gd"]
 
 func _initialize() -> void:
 	var total := 0

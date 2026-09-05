@@ -295,9 +295,13 @@ func _trace_path(came_from: PackedInt32Array, from: int, to: int) -> PackedInt32
 
 # Every shore this port can put a ship on. One search answers it for the whole map, so
 # the interface can highlight the real options instead of guessing at them.
-func reachable_shores(port_cell: int) -> PackedInt32Array:
+#
+# assume_port answers the same question for a cell that has no port yet, which is how the
+# bot decides whether one is worth building - the same search either way, so what it
+# plans for and what it later gets cannot disagree.
+func reachable_shores(port_cell: int, assume_port: bool = false) -> PackedInt32Array:
 	var found := PackedInt32Array()
-	if building_at[port_cell] != Balance.Building.PORT:
+	if not assume_port and building_at[port_cell] != Balance.Building.PORT:
 		return found
 	var total := owner_of.size()
 	var seen := PackedByteArray()

@@ -37,6 +37,11 @@ var opponent_focus := -1
 
 var discovery := LanDiscovery.new()
 
+# Set only in a practice match. When it is there, the host plays the second seat itself:
+# the bot hands over commands and they enter the very same batch a second phone would
+# have filled, so nothing else in the match loop knows the difference.
+var bot: BotPlayer = null
+
 var _tick_seconds := 1.0 / float(Balance.TICKS_PER_SECOND)
 var _accumulator := 0.0
 var _pending: Array[int] = []          # flat [player, type, a, b] awaiting the next tick
@@ -94,6 +99,7 @@ func leave() -> void:
 	is_host = false
 	paused = false
 	state = null
+	bot = null
 	local_player = -1
 	opponent_focus = -1
 	_pending.clear()
@@ -107,6 +113,17 @@ func start_solo(seed_value: int) -> void:
 	leave()
 	is_host = true
 	_start_local(seed_value, 0)
+
+# Practice against the machine. Offline by design: there is no peer, no discovery and no
+# hashing to do, only the local clock and a bot sitting in the second seat.
+func start_practice(level: int, seed_value: int = 0) -> void:
+	leave()
+	is_host = true
+	var actual_seed := seed_value
+	if actual_seed == 0:
+		actual_seed = int(Time.get_unix_time_from_system()) ^ (randi() & 0xFFFF)
+	bot = BotPlayer.new(1, level, actual_seed)
+	_start_local(actual_seed, 0)
 
 # --- Connection events -----------------------------------------------------------
 
@@ -211,6 +228,7 @@ func _process(delta: float) -> void:
 		_accumulator = 0.0
 
 func _host_tick() -> void:
+	_let_bot_play()
 	var batch := PackedInt32Array(_pending)
 	_pending.clear()
 	_run_tick(batch, true)
@@ -222,6 +240,16 @@ func _host_tick() -> void:
 		for key in _hash_log.keys():
 			if int(key) < oldest:
 				_hash_log.erase(key)
+
+# The bot queues its commands like any other player, so they are stamped by the same
+# tick, refused by the same rules and hashed into the same state. Its last move doubles
+# as the focus marker, which is how the opponent panel shows where it is working.
+func _let_bot_play() -> void:
+	if bot == null or state == null:
+		return
+	for cmd in bot.take_turn(state):
+		_queue(bot.player, int(cmd["type"]), int(cmd["a"]), int(cmd["b"]))
+	opponent_focus = bot.focus_cell
 
 @rpc("authority", "call_remote", "reliable")
 func _advance(tick: int, batch: PackedInt32Array) -> void:

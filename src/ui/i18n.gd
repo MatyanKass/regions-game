@@ -30,6 +30,12 @@ const STRINGS := {
 	"capture": {"ru": "Захватить", "en": "Capture"},
 	"send_ship": {"ru": "Отправить корабль", "en": "Send a ship"},
 	"pick_target": {"ru": "Выберите клетку на другом берегу", "en": "Pick a cell on the far shore"},
+	"practice": {"ru": "Игра с ботом", "en": "Play against a bot"},
+	"difficulty": {"ru": "Сложность", "en": "Difficulty"},
+	"bot_easy": {"ru": "Лёгкий", "en": "Easy"},
+	"bot_normal": {"ru": "Обычный", "en": "Normal"},
+	"bot_hard": {"ru": "Сложный", "en": "Hard"},
+	"bot": {"ru": "Бот", "en": "Bot"},
 	"you": {"ru": "Вы", "en": "You"},
 	"opponent": {"ru": "Противник", "en": "Opponent"},
 	"cells": {"ru": "Клетки", "en": "Cells"},
@@ -78,6 +84,11 @@ static func t(key: String) -> String:
 	if not STRINGS.has(key):
 		return key
 	return STRINGS[key].get(language, key)
+
+static func bot_level_name(level: int) -> String:
+	if not BotPlayer.LEVELS.has(level):
+		return ""
+	return t("bot_" + str(BotPlayer.LEVELS[level]["name"]))
 
 static func building_name(type: int) -> String:
 	if not Balance.BUILDINGS.has(type):
