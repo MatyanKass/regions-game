@@ -158,8 +158,8 @@ func _island_map() -> GameState:
 			state.terrain[state.index_of(x, y)] = WorldGen.LAND
 	# The other player holds a corner of the far island: somebody has to be alive for the
 	# match to continue, and putting them over there makes the water the only way to them.
-	state.owner_of[state.index_of(16, 10)] = 0
-	state.owner_of[state.index_of(9, 9)] = 1
+	state.set_cell(state.index_of(16, 10), 0)
+	state.set_cell(state.index_of(9, 9), 1)
 	return state
 
 func _far_island_cells(state: GameState) -> int:

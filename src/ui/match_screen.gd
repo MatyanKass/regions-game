@@ -16,6 +16,8 @@ const ZOOM_MAX := 2.20
 const TAP_SLOP := 18.0
 const TAP_MS := 400
 const BAR_HEIGHT := 96
+# How long the tense music keeps playing after the last cell changed hands.
+const COMBAT_MUSIC_SECONDS := 25.0
 
 enum Mode { BUILD, ATTACK, INFO }
 
@@ -51,6 +53,8 @@ var _mood_timer := 0.0
 # Watched so that losing ground can be heard, however it was lost: an enemy capture
 # and a ship landing both simply take a cell away.
 var _known_cells := -1
+var _known_enemy_cells := -1
+var _combat_left := 0.0
 
 func _ready() -> void:
 	map_view = MapView.new()
@@ -302,26 +306,24 @@ func _process(delta: float) -> void:
 	_update_cooldown()
 	_update_mood(delta)
 
-# The music turns tense the moment the two territories actually touch. Scanning the grid
-# once a second is plenty for something that changes this rarely.
+# The music turns tense when fighting actually happens - a cell changing hands either
+# way - and drifts back to calm after a quiet spell.
+#
+# It used to be decided by scanning the whole map for two territories touching, once a
+# second. On a thousand-cell world that is a million cells a second spent on choosing a
+# song. Both counts below come from the running totals, which cost nothing, and the
+# answer is better besides: two borders touching is not a fight, and a landing on the
+# far side of the world is one.
 func _update_mood(delta: float) -> void:
+	_combat_left = maxf(0.0, _combat_left - delta)
 	_mood_timer -= delta
 	if _mood_timer > 0.0:
 		return
 	_mood_timer = 1.0
-	Music.set_mood("combat" if _in_contact() else "calm")
+	Music.set_mood("combat" if _combat_left > 0.0 else "calm")
 
-func _in_contact() -> bool:
-	var st := Net.state
-	var me := Net.local_player
-	var foe := Net.opponent_index()
-	for i in range(st.owner_of.size()):
-		if int(st.owner_of[i]) != me:
-			continue
-		for n in st.neighbours(i):
-			if int(st.owner_of[n]) == foe:
-				return true
-	return false
+func _note_fighting() -> void:
+	_combat_left = COMBAT_MUSIC_SECONDS
 
 # Only the local player's own actions are announced. Hearing every move the opponent
 # makes across the whole map would be noise; losing a cell is the exception, and that is
@@ -360,11 +362,17 @@ func _on_advanced() -> void:
 		else:
 			_cell_menu.show_cell(Net.state, Net.local_player, map_view.selected)
 
+# Cheap enough to run every tick: both figures are running totals, not counts.
 func _watch_for_losses() -> void:
 	var cells := int(Net.state.aggregate(Net.local_player)["cells"])
 	if _known_cells >= 0 and cells < _known_cells:
 		Sfx.play("lost_cell")
+		_note_fighting()
 	_known_cells = cells
+	var enemy := int(Net.state.aggregate(Net.opponent_index())["cells"])
+	if _known_enemy_cells > 0 and enemy < _known_enemy_cells:
+		_note_fighting()
+	_known_enemy_cells = enemy
 
 func _refresh_stats() -> void:
 	var st := Net.state
@@ -400,8 +408,13 @@ func _set_resource(chip: UiKit.Chip, value: int, cap: int, per_tick: int,
 		Ink.ALERT if full else Ink.INK_SOFT)
 
 func _update_clock() -> void:
-	var left := maxi(0, Balance.MATCH_LIMIT_TICKS - Net.state.tick_count) / Balance.TICKS_PER_SECOND
-	_clock.text = "%d:%02d" % [left / 60, left % 60]
+	# Free play has no clock, so the counter shows how long you have been at it rather
+	# than how long is left.
+	var limit := Net.state.match_limit_ticks()
+	var seconds := Net.state.tick_count / Balance.TICKS_PER_SECOND
+	if limit > 0:
+		seconds = maxi(0, limit - Net.state.tick_count) / Balance.TICKS_PER_SECOND
+	_clock.text = "%d:%02d" % [seconds / 60, seconds % 60]
 
 func _update_cooldown() -> void:
 	var ticks := Net.state.capture_cooldown_left(Net.local_player)
@@ -622,7 +635,7 @@ func _result_summary(st: GameState) -> String:
 	var mine := st.aggregate(Net.local_player)
 	var theirs := st.aggregate(Net.opponent_index())
 	var seconds := st.tick_count / Balance.TICKS_PER_SECOND
-	var reason := I18n.t("ended_time") if st.tick_count >= Balance.MATCH_LIMIT_TICKS \
+	var reason := I18n.t("ended_time") if st.tick_count >= st.match_limit_ticks() \
 		else I18n.t("ended_eliminated")
 	return "%s\n\n%s: %d — %d\n%s: %d — %d\n%s %d:%02d" % [
 		reason,

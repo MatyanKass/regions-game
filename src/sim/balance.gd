@@ -18,13 +18,13 @@ const TICKS_PER_SECOND := 20
 const UNIT := 1000
 
 # --- World ---
-const MAP_WIDTH := 25
-const MAP_HEIGHT := 25
+# The size of a map and how far apart the players start are chosen per world, in
+# WorldSettings; what stays here is how much of any map is water.
 const SEA_PERCENT_MIN := 5
 const SEA_PERCENT_MAX := 15
-const START_DISTANCE := 16
 
 # --- Match ---
+# The default when nobody chose otherwise. A world carries its own limit.
 const MATCH_LIMIT_TICKS := 40 * 60 * TICKS_PER_SECOND
 
 # --- Base economy, granted only while a player still owns at least one cell ---

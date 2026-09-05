@@ -34,7 +34,7 @@ func _ready() -> void:
 		_open_lobby()
 		return
 	if args.has("--preview") or not _screenshot_path.is_empty():
-		Net.start_solo(20260905)
+		Net.start_solo(20260905, WorldSettings.of_size(60))
 		_stock_preview()
 		return
 	# Straight into a practice match, for looking at the bot play without tapping through
@@ -108,10 +108,11 @@ func _stock_preview() -> void:
 			var cell := st.index_of(x, y)
 			if not st.is_land(cell):
 				continue
-			st.owner_of[cell] = 0
 			if placed < plan.size():
-				st.building_at[cell] = plan[placed]
+				st.set_cell(cell, 0, plan[placed])
 				placed += 1
+			else:
+				st.set_cell(cell, 0)
 	# Filled to the brim, so the preview also shows what an overflowing purse looks like.
 	st.coins[0] = int(st.aggregate(0)["coin_cap"])
 	st.power[0] = 45 * Balance.UNIT

@@ -30,37 +30,63 @@ func cell_at(world: Vector2) -> int:
 		return -1
 	return state.index_of(x, y)
 
+# The window of cells the camera can actually see, with a one cell margin so nothing
+# pops in at the edge. Everything drawn below walks this rather than the whole map: on a
+# four hundred cell world the difference is between a hundred and sixty thousand cells a
+# frame and about six hundred.
+func visible_cells() -> Rect2i:
+	if state == null:
+		return Rect2i()
+	var inverse := get_viewport().get_canvas_transform().affine_inverse()
+	var screen := get_viewport().get_visible_rect()
+	var a := inverse * screen.position
+	var b := inverse * (screen.position + screen.size)
+	var x0 := clampi(int(floor(minf(a.x, b.x) / CELL)) - 1, 0, state.width - 1)
+	var y0 := clampi(int(floor(minf(a.y, b.y) / CELL)) - 1, 0, state.height - 1)
+	var x1 := clampi(int(ceil(maxf(a.x, b.x) / CELL)) + 1, 0, state.width - 1)
+	var y1 := clampi(int(ceil(maxf(a.y, b.y) / CELL)) + 1, 0, state.height - 1)
+	return Rect2i(x0, y0, x1 - x0 + 1, y1 - y0 + 1)
+
 func _draw() -> void:
 	if state == null:
 		return
-	var w := state.width
-	var h := state.height
+	var view := visible_cells()
+	if view.size.x <= 0 or view.size.y <= 0:
+		return
 	var full := Rect2(Vector2.ZERO, map_size())
 	draw_rect(full, Ink.PAPER, true)
 
-	for i in range(state.owner_of.size()):
-		if state.terrain[i] != WorldGen.LAND:
-			draw_rect(cell_rect(i), Ink.SEA, true)
+	for y in range(view.position.y, view.end.y):
+		for x in range(view.position.x, view.end.x):
+			var i := state.index_of(x, y)
+			if state.terrain[i] != WorldGen.LAND:
+				draw_rect(cell_rect(i), Ink.SEA, true)
 
-	# Squared paper: every line thin, every fifth one darker, like a real notebook.
-	for x in range(w + 1):
+	# Squared paper: every line thin, every fifth one darker, like a real notebook. Only
+	# the lines crossing the window are drawn.
+	var top := view.position.y * CELL
+	var bottom := view.end.y * CELL
+	var left := view.position.x * CELL
+	var right := view.end.x * CELL
+	for x in range(view.position.x, view.end.x + 1):
 		var strong := x % 5 == 0
-		draw_line(Vector2(x * CELL, 0), Vector2(x * CELL, h * CELL),
+		draw_line(Vector2(x * CELL, top), Vector2(x * CELL, bottom),
 			Ink.GRID_STRONG if strong else Ink.GRID, 2.6 if strong else 1.4)
-	for y in range(h + 1):
-		var strong := y % 5 == 0
-		draw_line(Vector2(0, y * CELL), Vector2(w * CELL, y * CELL),
-			Ink.GRID_STRONG if strong else Ink.GRID, 2.6 if strong else 1.4)
+	for y in range(view.position.y, view.end.y + 1):
+		var strong_row := y % 5 == 0
+		draw_line(Vector2(left, y * CELL), Vector2(right, y * CELL),
+			Ink.GRID_STRONG if strong_row else Ink.GRID, 2.6 if strong_row else 1.4)
 
 	var margin_x := 2 * CELL
-	Ink.line(self, Vector2(margin_x, 0), Vector2(margin_x, h * CELL), Ink.MARGIN, 2.0)
+	if left <= margin_x and margin_x <= right:
+		Ink.line(self, Vector2(margin_x, top), Vector2(margin_x, bottom), Ink.MARGIN, 2.0)
 
-	_draw_territory()
-	_draw_buildings()
+	_draw_territory(view)
+	_draw_buildings(view)
 	_draw_ships()
 
 	if attack_mode:
-		_draw_attack_targets()
+		_draw_attack_targets(view)
 
 	if selected >= 0:
 		Ink.rect(self, cell_rect(selected).grow(-3.0), Ink.INK, 3.0)
@@ -73,50 +99,53 @@ func _draw() -> void:
 
 	Ink.rect(self, full, Ink.INK, 4.0)
 
-func _draw_territory() -> void:
-	for i in range(state.owner_of.size()):
-		var owner_id := int(state.owner_of[i])
-		if owner_id == GameState.NEUTRAL:
-			continue
-		var pen := Ink.pen_of(owner_id)
-		var tint := Color(pen.r, pen.g, pen.b, 0.15)
-		draw_rect(cell_rect(i), tint, true)
+func _draw_territory(view: Rect2i) -> void:
+	for y in range(view.position.y, view.end.y):
+		for x in range(view.position.x, view.end.x):
+			var i := state.index_of(x, y)
+			var owner_id := int(state.owner_of[i])
+			if owner_id == GameState.NEUTRAL:
+				continue
+			var pen := Ink.pen_of(owner_id)
+			draw_rect(cell_rect(i), Color(pen.r, pen.g, pen.b, 0.15), true)
 
 	# Borders are drawn per edge so a territory reads as one outlined shape, the way a
 	# fleet is outlined in battleship.
-	for i in range(state.owner_of.size()):
-		var owner_id := int(state.owner_of[i])
-		if owner_id == GameState.NEUTRAL:
-			continue
-		var pen := Ink.pen_of(owner_id)
-		var r := cell_rect(i)
-		var x := i % state.width
-		var y := i / state.width
-		if x == 0 or state.owner_of[i - 1] != owner_id:
-			Ink.line(self, r.position, r.position + Vector2(0, CELL), pen, 4.0)
-		if x == state.width - 1 or state.owner_of[i + 1] != owner_id:
-			Ink.line(self, r.position + Vector2(CELL, 0), r.position + Vector2(CELL, CELL), pen, 4.0)
-		if y == 0 or state.owner_of[i - state.width] != owner_id:
-			Ink.line(self, r.position, r.position + Vector2(CELL, 0), pen, 4.0)
-		if y == state.height - 1 or state.owner_of[i + state.width] != owner_id:
-			Ink.line(self, r.position + Vector2(0, CELL), r.position + Vector2(CELL, CELL), pen, 4.0)
+	for y in range(view.position.y, view.end.y):
+		for x in range(view.position.x, view.end.x):
+			var i := state.index_of(x, y)
+			var owner_id := int(state.owner_of[i])
+			if owner_id == GameState.NEUTRAL:
+				continue
+			var pen := Ink.pen_of(owner_id)
+			var r := cell_rect(i)
+			if x == 0 or state.owner_of[i - 1] != owner_id:
+				Ink.line(self, r.position, r.position + Vector2(0, CELL), pen, 4.0)
+			if x == state.width - 1 or state.owner_of[i + 1] != owner_id:
+				Ink.line(self, r.position + Vector2(CELL, 0), r.position + Vector2(CELL, CELL), pen, 4.0)
+			if y == 0 or state.owner_of[i - state.width] != owner_id:
+				Ink.line(self, r.position, r.position + Vector2(CELL, 0), pen, 4.0)
+			if y == state.height - 1 or state.owner_of[i + state.width] != owner_id:
+				Ink.line(self, r.position + Vector2(0, CELL), r.position + Vector2(CELL, CELL), pen, 4.0)
 
-func _draw_buildings() -> void:
+func _draw_buildings(view: Rect2i) -> void:
 	var idle := _idle_cells()
-	for i in range(state.building_at.size()):
-		var type := int(state.building_at[i])
-		if type == Balance.Building.NONE:
-			continue
-		var pen := Ink.pen_of(int(state.owner_of[i]))
-		var r := cell_rect(i)
-		var stopped := idle.has(i)
-		# A building with nobody in it is drawn faint: at a glance the working half of a
-		# region is solid and the stalled half is washed out.
-		var colour := Color(pen.r, pen.g, pen.b, 0.35) if stopped else pen
-		Ink.draw_building(self, type, r.grow(-CELL * 0.18), colour, 3.0)
-		Ink.draw_level_pips(self, r, int(state.level_at[i]), colour)
-		if stopped:
-			Ink.draw_idle_badge(self, r)
+	for y in range(view.position.y, view.end.y):
+		for x in range(view.position.x, view.end.x):
+			var i := state.index_of(x, y)
+			var type := int(state.building_at[i])
+			if type == Balance.Building.NONE:
+				continue
+			var pen := Ink.pen_of(int(state.owner_of[i]))
+			var r := cell_rect(i)
+			var stopped := idle.has(i)
+			# A building with nobody in it is drawn faint: at a glance the working half
+			# of a region is solid and the stalled half is washed out.
+			var colour := Color(pen.r, pen.g, pen.b, 0.35) if stopped else pen
+			Ink.draw_building(self, type, r.grow(-CELL * 0.18), colour, 3.0)
+			Ink.draw_level_pips(self, r, int(state.level_at[i]), colour)
+			if stopped:
+				Ink.draw_idle_badge(self, r)
 
 # Which buildings are standing idle, for every player on the board. The simulation
 # decides; the map only asks, so what is greyed out and what actually earns can never
@@ -140,7 +169,7 @@ func _draw_ships() -> void:
 		var a := cell_rect(from_cell).get_center()
 		var b := cell_rect(to_cell).get_center()
 		var pen := Ink.pen_of(int(ship["owner"]))
-		# The wake is the route still to sail, which now bends round headlands.
+		# The wake is the route still to sail, which bends round headlands.
 		var wake := PackedVector2Array([a])
 		for i in range(step, path.size()):
 			wake.append(cell_rect(path[i]).get_center())
@@ -151,17 +180,19 @@ func _draw_ships() -> void:
 # In attack mode every cell the player could take right now is ringed, so aiming is a
 # matter of tapping a marked square rather than guessing what borders what. The ring
 # fades while the capture is reloading, which is the cooldown made visible on the map.
-func _draw_attack_targets() -> void:
+func _draw_attack_targets(view: Rect2i) -> void:
 	var pen := Ink.pen_of(local_player)
 	var alpha := 0.25 if cooldown_left > 0 else 0.85
-	for i in range(state.owner_of.size()):
-		if not is_land(i) or int(state.owner_of[i]) == local_player:
-			continue
-		if not state.touches_player(i, local_player):
-			continue
-		var r := cell_rect(i).grow(-6.0)
-		draw_rect(r, Color(pen.r, pen.g, pen.b, alpha * 0.16), true)
-		Ink.rect(self, r, Color(pen.r, pen.g, pen.b, alpha), 3.0)
+	for y in range(view.position.y, view.end.y):
+		for x in range(view.position.x, view.end.x):
+			var i := state.index_of(x, y)
+			if not is_land(i) or int(state.owner_of[i]) == local_player:
+				continue
+			if not state.touches_player(i, local_player):
+				continue
+			var r := cell_rect(i).grow(-6.0)
+			draw_rect(r, Color(pen.r, pen.g, pen.b, alpha * 0.16), true)
+			Ink.rect(self, r, Color(pen.r, pen.g, pen.b, alpha), 3.0)
 
 func is_land(cell: int) -> bool:
 	return state.terrain[cell] == WorldGen.LAND

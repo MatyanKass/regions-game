@@ -44,6 +44,9 @@ var discovery := LanDiscovery.new()
 # the bot hands over commands and they enter the very same batch a second phone would
 # have filled, so nothing else in the match loop knows the difference.
 var bot: BotPlayer = null
+# The world the host chose. It travels to the joiner at match start, so both sides
+# generate the same map from the same seed.
+var settings := WorldSettings.new()
 
 var _tick_seconds := 1.0 / float(Balance.TICKS_PER_SECOND)
 var _accumulator := 0.0
@@ -62,8 +65,10 @@ func _ready() -> void:
 
 # --- Lobby -----------------------------------------------------------------------
 
-func host_room(room_name: String) -> bool:
+func host_room(room_name: String, world: WorldSettings = null) -> bool:
+	var chosen := world if world != null else WorldSettings.new()
 	leave()
+	settings = chosen
 	var peer := ENetMultiplayerPeer.new()
 	if peer.create_server(GAME_PORT, 1) != OK:
 		emit_signal("lobby_status", I18n.t("connect_failed"))
@@ -112,15 +117,30 @@ func leave() -> void:
 
 # A match against nobody, for looking at the map while developing. It runs the very
 # same tick loop; it simply has no peer to talk to.
-func start_solo(seed_value: int) -> void:
+func start_solo(seed_value: int, world: WorldSettings = null) -> void:
+	var chosen := world if world != null else WorldSettings.new()
 	leave()
+	settings = chosen
 	is_host = true
 	_start_local(seed_value, 0)
 
+# A world with nobody else in it: no opponent, no clock, no winning or losing. The same
+# tick loop and the same rules, which is the whole point - it is somewhere to learn the
+# game and somewhere to just build.
+func start_free(world: WorldSettings) -> void:
+	world.mode = WorldSettings.Mode.FREE
+	leave()
+	settings = world
+	is_host = true
+	_start_local(int(Time.get_unix_time_from_system()) ^ (randi() & 0xFFFF), 0)
+
 # Practice against the machine. Offline by design: there is no peer, no discovery and no
 # hashing to do, only the local clock and a bot sitting in the second seat.
-func start_practice(level: int, seed_value: int = 0) -> void:
+func start_practice(level: int, seed_value: int = 0, world: WorldSettings = null) -> void:
+	var chosen := world if world != null else WorldSettings.new()
+	chosen.mode = WorldSettings.Mode.MATCH
 	leave()
+	settings = chosen
 	is_host = true
 	var actual_seed := seed_value
 	if actual_seed == 0:
@@ -138,7 +158,7 @@ func _on_peer_connected(id: int) -> void:
 	_peer_of_player[1] = id
 	discovery.stop_broadcast()
 	var seed_value := int(Time.get_unix_time_from_system()) ^ (randi() & 0xFFFF)
-	_begin_match.rpc_id(id, seed_value, 1)
+	_begin_match.rpc_id(id, seed_value, 1, settings.to_dict())
 	_start_local(seed_value, 0)
 
 func _on_peer_disconnected(_id: int) -> void:
@@ -163,7 +183,7 @@ func _on_server_disconnected() -> void:
 # --- Match start -----------------------------------------------------------------
 
 func _start_local(seed_value: int, player: int) -> void:
-	state = GameState.create(seed_value, 2)
+	state = GameState.create(seed_value, settings)
 	local_player = player
 	mode = Mode.PLAYING
 	paused = false
@@ -172,7 +192,8 @@ func _start_local(seed_value: int, player: int) -> void:
 	emit_signal("match_started")
 
 @rpc("authority", "call_remote", "reliable")
-func _begin_match(seed_value: int, player: int) -> void:
+func _begin_match(seed_value: int, player: int, world: Dictionary) -> void:
+	settings = WorldSettings.from_dict(world)
 	_start_local(seed_value, player)
 
 @rpc("authority", "call_remote", "reliable")

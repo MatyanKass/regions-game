@@ -8,8 +8,11 @@
 class_name LobbyScreen
 extends CanvasLayer
 
-# The chosen difficulty survives a language switch, which rebuilds this screen.
+# These survive a language switch, which rebuilds this screen.
 static var bot_level: int = BotPlayer.Level.NORMAL
+static var map_size: int = 25
+static var sea_choice: int = -1        # -1 leaves it to the seed
+static var match_minutes: int = 40
 
 const CARD_WIDTH := 470
 const WIDE_ENOUGH := 980   # below this the decorative board is dropped
@@ -18,6 +21,7 @@ var _status: Label
 var _rooms_box: VBoxContainer
 var _address: LineEdit
 var _level_button: OptionButton
+var _size_note: Label
 
 func _ready() -> void:
 	var paper := UiKit.Paper.new()
@@ -36,7 +40,14 @@ func _ready() -> void:
 	columns.add_theme_constant_override("separation", 48)
 	frame.add_child(columns)
 
-	columns.add_child(_menu_column())
+	# The card grew a world section and no longer fits a short screen, so it scrolls. A
+	# phone held sideways has very little height to spare.
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(CARD_WIDTH + 16, 0)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_menu_column())
+	columns.add_child(scroll)
 
 	# The board on the right is the game's own icon art, blown up. It fills what was an
 	# empty half of the screen with something that says what the game is.
@@ -58,7 +69,7 @@ func _ready() -> void:
 func _menu_column() -> Control:
 	var column := VBoxContainer.new()
 	column.custom_minimum_size = Vector2(CARD_WIDTH, 0)
-	column.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_theme_constant_override("separation", 4)
 
 	var title := UiKit.heading(I18n.t("app_title"), 54)
@@ -108,9 +119,16 @@ func _card_contents() -> Control:
 	practice_row.add_child(_level_button)
 	box.add_child(practice_row)
 
+	var free := _big_button(I18n.t("free_play"))
+	free.pressed.connect(_on_free_play)
+	box.add_child(free)
+
 	var host := _big_button(I18n.t("host_game"))
 	host.pressed.connect(_on_host)
 	box.add_child(host)
+
+	box.add_child(_divider(I18n.t("world")))
+	box.add_child(_world_settings())
 
 	box.add_child(_divider(I18n.t("rooms")))
 
@@ -150,6 +168,84 @@ func _card_contents() -> Control:
 	box.add_child(footer)
 	return box
 
+# The world is chosen before anyone plays in it: how big, how much of it is water, and
+# how long a match may run. Free play ignores the clock.
+func _world_settings() -> Control:
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 6)
+
+	grid.add_child(UiKit.body(I18n.t("map_size"), 14, Ink.INK_SOFT))
+	var size_row := HBoxContainer.new()
+	size_row.add_theme_constant_override("separation", 8)
+	var sizes := OptionButton.new()
+	sizes.custom_minimum_size = Vector2(120, 38)
+	for value in WorldSettings.SIZES:
+		sizes.add_item("%d × %d" % [value, value], value)
+	if sizes.get_item_index(map_size) < 0:
+		sizes.add_item("%d × %d" % [map_size, map_size], map_size)
+	sizes.select(sizes.get_item_index(map_size))
+	UiKit.option(sizes)
+	sizes.item_selected.connect(func(index: int):
+		map_size = sizes.get_item_id(index)
+		_update_world_note())
+	size_row.add_child(sizes)
+	_size_note = UiKit.body("", 12, Ink.INK_SOFT)
+	_size_note.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	size_row.add_child(_size_note)
+	grid.add_child(size_row)
+
+	grid.add_child(UiKit.body(I18n.t("sea"), 14, Ink.INK_SOFT))
+	var seas := OptionButton.new()
+	seas.custom_minimum_size = Vector2(160, 38)
+	seas.add_item(I18n.t("sea_random"), 100)
+	for percent in [0, 5, 10, 20, 35]:
+		seas.add_item("%d%%" % percent, percent)
+	seas.select(seas.get_item_index(100 if sea_choice < 0 else sea_choice))
+	UiKit.option(seas)
+	seas.item_selected.connect(func(index: int):
+		var id := seas.get_item_id(index)
+		sea_choice = -1 if id == 100 else id)
+	grid.add_child(seas)
+
+	grid.add_child(UiKit.body(I18n.t("match_length"), 14, Ink.INK_SOFT))
+	var lengths := OptionButton.new()
+	lengths.custom_minimum_size = Vector2(160, 38)
+	for value in [10, 20, 40, 90]:
+		lengths.add_item("%d %s" % [value, I18n.t("minutes")], value)
+	lengths.select(lengths.get_item_index(match_minutes))
+	UiKit.option(lengths)
+	lengths.item_selected.connect(func(index: int): match_minutes = lengths.get_item_id(index))
+	grid.add_child(lengths)
+
+	_update_world_note()
+	return grid
+
+func _update_world_note() -> void:
+	if _size_note == null:
+		return
+	var cells := map_size * map_size
+	var text := "%s %s" % [_thousands(cells), I18n.t("cells_count")]
+	if cells >= 40000:
+		text += "\n" + I18n.t("huge_world_hint")
+	_size_note.text = text
+
+static func _thousands(value: int) -> String:
+	var text := str(value)
+	var out := ""
+	for i in range(text.length()):
+		if i > 0 and (text.length() - i) % 3 == 0:
+			out += " "
+		out += text[i]
+	return out
+
+func _chosen_world() -> WorldSettings:
+	var world := WorldSettings.of_size(map_size)
+	world.sea_percent = sea_choice
+	world.match_minutes = match_minutes
+	return world
+
 func _big_button(text: String, accent: Color = Ink.INK, filled: bool = false) -> Button:
 	var button := Button.new()
 	button.text = text
@@ -173,10 +269,13 @@ func _divider(text: String) -> Control:
 	return row
 
 func _on_practice() -> void:
-	Net.start_practice(bot_level)
+	Net.start_practice(bot_level, 0, _chosen_world())
+
+func _on_free_play() -> void:
+	Net.start_free(_chosen_world())
 
 func _on_host() -> void:
-	if Net.host_room(_default_room_name()):
+	if Net.host_room(_default_room_name(), _chosen_world()):
 		_status.text = I18n.t("waiting_player")
 
 func _join(ip: String) -> void:

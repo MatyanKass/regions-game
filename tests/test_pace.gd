@@ -22,7 +22,7 @@ func _play_out(seed_value: int) -> void:
 	var land := _land_cells(state)
 	var report: Array[String] = []
 	var minute := 0
-	for tick in range(Balance.MATCH_LIMIT_TICKS):
+	for tick in range(state.match_limit_ticks()):
 		for bot in bots:
 			for cmd in (bot as BotPlayer).take_turn(state):
 				state.apply_command((bot as BotPlayer).player, cmd)

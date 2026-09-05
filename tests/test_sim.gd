@@ -17,22 +17,22 @@ func expect_eq(actual, expected, message: String) -> void:
 # --- World generation ---
 
 func test_world_generation_is_deterministic() -> void:
-	var a := WorldGen.generate(12345)
-	var b := WorldGen.generate(12345)
+	var a := WorldGen.generate(12345, WorldSettings.new())
+	var b := WorldGen.generate(12345, WorldSettings.new())
 	expect(a["terrain"] == b["terrain"], "same seed must produce the same terrain")
 	expect(a["starts"] == b["starts"], "same seed must produce the same start cells")
 
 func test_different_seeds_differ() -> void:
 	var same := 0
 	for seed_value in range(1, 20):
-		if WorldGen.generate(seed_value)["terrain"] == WorldGen.generate(seed_value + 100)["terrain"]:
+		if WorldGen.generate(seed_value, WorldSettings.new())["terrain"] == WorldGen.generate(seed_value + 100, WorldSettings.new())["terrain"]:
 			same += 1
 	expect_eq(same, 0, "different seeds must produce different maps")
 
 func test_sea_percentage_stays_in_range() -> void:
 	var seen: Dictionary = {}
 	for seed_value in range(1, 60):
-		var world := WorldGen.generate(seed_value)
+		var world := WorldGen.generate(seed_value, WorldSettings.new())
 		var pct := int(world["sea_percent"])
 		seen[pct] = true
 		expect(pct >= Balance.SEA_PERCENT_MIN - 1 and pct <= Balance.SEA_PERCENT_MAX,
@@ -41,7 +41,7 @@ func test_sea_percentage_stays_in_range() -> void:
 
 func test_start_cells_are_land_and_apart() -> void:
 	for seed_value in range(1, 60):
-		var world := WorldGen.generate(seed_value)
+		var world := WorldGen.generate(seed_value, WorldSettings.new())
 		var terrain: PackedByteArray = world["terrain"]
 		var starts: PackedInt32Array = world["starts"]
 		expect_eq(starts.size(), 2, "two players means two start cells")
@@ -49,7 +49,7 @@ func test_start_cells_are_land_and_apart() -> void:
 		for c in starts:
 			expect(c >= 0, "start cell must exist")
 			expect_eq(terrain[c], WorldGen.LAND, "start cell must be land")
-		var w := Balance.MAP_WIDTH
+		var w := int(world["width"])
 		var dist := absi(starts[0] % w - starts[1] % w) + absi(starts[0] / w - starts[1] / w)
 		expect(dist >= 10, "start cells too close on seed %d (distance %d)" % [seed_value, dist])
 
@@ -184,7 +184,7 @@ func test_ship_crosses_the_sea_and_takes_the_cell() -> void:
 		return
 	var port_cell := int(route["port"])
 	var target := int(route["target"])
-	s.owner_of[port_cell] = 0
+	s.set_cell(port_cell, 0)
 	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, port_cell, Balance.Building.PORT))
 	var power_before := s.power[0]
 	expect_eq(s.apply_command(0, GameState.make_command(GameState.Command.LAUNCH_SHIP, port_cell, target)), "",
@@ -226,14 +226,12 @@ func test_ship_sails_round_a_headland() -> void:
 	# only a route that follows the water can connect them.
 	var s := GameState.create(7)
 	s.terrain.fill(WorldGen.SEA)
-	var w := s.width
 	for y in range(s.height):
 		s.terrain[s.index_of(5, y)] = WorldGen.LAND
 	s.terrain[s.index_of(5, 0)] = WorldGen.SEA
 	var port_cell := s.index_of(5, 6)
 	var target := s.index_of(5, 10)
-	s.owner_of[port_cell] = 0
-	s.building_at[port_cell] = Balance.Building.PORT
+	s.set_cell(port_cell, 0, Balance.Building.PORT)
 	var path := s.sea_path(port_cell, target)
 	expect(not path.is_empty(), "the ship should find its way round the gap")
 	expect(path.size() > 4, "the route has to be longer than the blocked straight line")
@@ -247,8 +245,7 @@ func test_reachable_shores_matches_what_is_allowed() -> void:
 	if route.is_empty():
 		return
 	var port_cell := int(route["port"])
-	s.owner_of[port_cell] = 0
-	s.building_at[port_cell] = Balance.Building.PORT
+	s.set_cell(port_cell, 0, Balance.Building.PORT)
 	var shores := s.reachable_shores(port_cell)
 	expect(shores.size() > 0, "a port on open water reaches at least one shore")
 	for cell in shores:
@@ -409,12 +406,10 @@ func test_the_biggest_factory_is_staffed_first() -> void:
 	var big := _grant_cell(s, 0, small_a)
 	var small_b := _grant_cell(s, 0, big)
 	expect(small_b >= 0, "seed 7 should offer four cells in a row")
-	s.building_at[home] = Balance.Building.HOUSE
-	s.level_at[home] = 1
+	s.set_cell(home, 0, Balance.Building.HOUSE, 1)
 	for cell in [small_a, big, small_b]:
-		s.building_at[cell] = Balance.Building.FACTORY
-		s.level_at[cell] = 1
-	s.level_at[big] = 3
+		s.set_cell(cell, 0, Balance.Building.FACTORY, 1)
+	s.set_cell(big, 0, Balance.Building.FACTORY, 3)
 
 	var agg := s.aggregate(0)
 	expect_eq(int(agg["people"]), 2, "one level one house holds two")
@@ -436,12 +431,9 @@ func test_idle_factories_do_not_break_the_lockstep() -> void:
 		state.coins[0] = 5000 * Balance.UNIT
 		var next := _grant_cell(state, 0, home)
 		var third := _grant_cell(state, 0, next)
-		state.building_at[home] = Balance.Building.FACTORY
-		state.level_at[home] = 2
-		state.building_at[next] = Balance.Building.FACTORY
-		state.level_at[next] = 2
-		state.building_at[third] = Balance.Building.FACTORY
-		state.level_at[third] = 1
+		state.set_cell(home, 0, Balance.Building.FACTORY, 2)
+		state.set_cell(next, 0, Balance.Building.FACTORY, 2)
+		state.set_cell(third, 0, Balance.Building.FACTORY, 1)
 	for i in range(60):
 		a.tick()
 		b.tick()
@@ -491,7 +483,7 @@ func test_snapshot_carries_ships() -> void:
 	if route.is_empty():
 		return
 	var port_cell := int(route["port"])
-	s.owner_of[port_cell] = 0
+	s.set_cell(port_cell, 0)
 	s.apply_command(0, GameState.make_command(GameState.Command.BUILD, port_cell, Balance.Building.PORT))
 	s.apply_command(0, GameState.make_command(GameState.Command.LAUNCH_SHIP, port_cell, int(route["target"])))
 	var copy := GameState.from_snapshot(s.snapshot())
@@ -529,7 +521,7 @@ func _state_with_coins(seed_value: int, amount: int) -> GameState:
 func _grant_cell(s: GameState, player: int, near: int) -> int:
 	for n in s.neighbours(near):
 		if s.is_land(n) and s.owner_of[n] == GameState.NEUTRAL:
-			s.owner_of[n] = player
+			s.set_cell(n, player)
 			return n
 	return -1
 
@@ -552,14 +544,14 @@ func _inland_cell(s: GameState, player: int) -> int:
 	var home := _home_of(s, player)
 	for i in range(s.owner_of.size()):
 		if s.is_land(i) and not s.touches_sea(i) and s.owner_of[i] == GameState.NEUTRAL:
-			s.owner_of[i] = player
+			s.set_cell(i, player)
 			return i
 	return home
 
 func _coastal_cell(s: GameState, player: int) -> int:
 	for i in range(s.owner_of.size()):
 		if s.is_land(i) and s.touches_sea(i) and s.owner_of[i] == GameState.NEUTRAL:
-			s.owner_of[i] = player
+			s.set_cell(i, player)
 			return i
 	return -1
 
@@ -569,9 +561,11 @@ func _find_sea_route(s: GameState, player: int) -> Dictionary:
 		if not s.is_land(from) or not s.touches_sea(from):
 			continue
 		var was := int(s.building_at[from])
-		s.building_at[from] = Balance.Building.PORT
+		var was_owner := int(s.owner_of[from])
+		var was_level := maxi(1, int(s.level_at[from]))
+		s.set_cell(from, was_owner, Balance.Building.PORT)
 		var shores := s.reachable_shores(from)
-		s.building_at[from] = was
+		s.set_cell(from, was_owner, was, was_level)
 		for cell in shores:
 			if s.owner_of[cell] == GameState.NEUTRAL and cell != from:
 				return {"port": from, "target": cell}

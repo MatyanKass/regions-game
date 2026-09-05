@@ -4,8 +4,13 @@
 # identical state_hash() every tick. Rules for keeping that true:
 #   * integers only, never float;
 #   * never iterate a Dictionary whose insertion order could differ;
-#   * every value that can be derived from the grid is derived, never cached, so the
-#     grid stays the single source of truth and caches cannot drift apart.
+#   * the running totals below are the one cache, and tests hold them to a full
+#     recount, because a cache that drifts is a desync waiting to happen.
+#
+# Those totals exist because a world may be a thousand cells across. Counting a player's
+# income by walking the grid was honest and fine at 25 by 25; at a million cells it is a
+# second of work per tick. Everything that changes the grid goes through _forget() and
+# _remember(), which is also what keeps the rolling checksum the desync detector uses.
 class_name GameState
 extends RefCounted
 
@@ -30,13 +35,36 @@ var ships: Array[Dictionary] = []
 var tick_count: int = 0
 var finished: bool = false
 var winner: int = -1
+var settings: WorldSettings
 
-static func create(seed_value: int, player_count: int = 2) -> GameState:
+# Running totals, per player. Maintained by _forget()/_remember(); verify_totals()
+# recounts the slow way and is what the tests measure them against.
+var _t_cells: PackedInt32Array
+var _t_people: PackedInt32Array
+var _t_coin_rate: PackedInt64Array    # from buildings that need nobody to work them
+var _t_power_rate: PackedInt64Array
+var _t_coin_cap: PackedInt64Array     # from buildings only; land is added on top
+var _t_power_cap: PackedInt64Array
+var _t_jobs: Array = []               # per player: cells of buildings that need staffing
+# A rolling checksum of the whole grid, so the hash the two devices compare does not
+# have to read a million cells to be computed.
+var _grid_sum: int = 0
+
+static func create(seed_value: int, player_count_or_settings = 2) -> GameState:
+	# Callers that only care about the classic map still pass a player count.
+	var config: WorldSettings
+	if player_count_or_settings is WorldSettings:
+		config = player_count_or_settings
+	else:
+		config = WorldSettings.new()
+		if int(player_count_or_settings) == 1:
+			config.mode = WorldSettings.Mode.FREE
 	var s := GameState.new()
-	var world := WorldGen.generate(seed_value, player_count)
+	var world := WorldGen.generate(seed_value, config)
+	s.settings = config
 	s.map_seed = seed_value
-	s.width = Balance.MAP_WIDTH
-	s.height = Balance.MAP_HEIGHT
+	s.width = config.width
+	s.height = config.height
 	s.terrain = world["terrain"]
 	var total := s.width * s.height
 	s.owner_of = PackedByteArray()
@@ -53,13 +81,88 @@ static func create(seed_value: int, player_count: int = 2) -> GameState:
 	s.alive = PackedByteArray()
 	s.capture_ready = PackedInt64Array()
 	var starts: PackedInt32Array = world["starts"]
-	for p in range(player_count):
+	var count := config.player_count()
+	for p in range(count):
 		s.coins.append(Balance.START_COINS)
 		s.power.append(Balance.START_POWER)
 		s.alive.append(1)
 		s.capture_ready.append(0)
+	for p in range(count):
 		s.owner_of[starts[p]] = p
+	s.recount()
 	return s
+
+func match_limit_ticks() -> int:
+	return settings.match_limit_ticks() if settings != null else Balance.MATCH_LIMIT_TICKS
+
+func is_free_play() -> bool:
+	return settings != null and settings.mode == WorldSettings.Mode.FREE
+
+# --- Running totals -----------------------------------------------------------------
+
+func _reset_totals() -> void:
+	var count := alive.size()
+	_t_cells = PackedInt32Array(); _t_cells.resize(count); _t_cells.fill(0)
+	_t_people = PackedInt32Array(); _t_people.resize(count); _t_people.fill(0)
+	_t_coin_rate = PackedInt64Array(); _t_coin_rate.resize(count); _t_coin_rate.fill(0)
+	_t_power_rate = PackedInt64Array(); _t_power_rate.resize(count); _t_power_rate.fill(0)
+	_t_coin_cap = PackedInt64Array(); _t_coin_cap.resize(count); _t_coin_cap.fill(0)
+	_t_power_cap = PackedInt64Array(); _t_power_cap.resize(count); _t_power_cap.fill(0)
+	_t_jobs = []
+	for p in range(count):
+		_t_jobs.append(PackedInt32Array())
+	_grid_sum = 0
+
+# Recounts everything from the grid. Used when a snapshot arrives and by the tests that
+# hold the running totals honest.
+func recount() -> void:
+	_reset_totals()
+	for i in range(owner_of.size()):
+		_remember(i)
+
+# One cell's contribution to the checksum. Multiplying by the index means two cells
+# swapping their contents changes the sum, which a plain total would not notice.
+func _cell_signature(cell: int) -> int:
+	var value := int(owner_of[cell]) * 131 + int(building_at[cell]) * 17 + int(level_at[cell]) * 7 + 1
+	return value * (cell + 1)
+
+# Every change to a cell is bracketed by these two: forget what it contributed, change
+# it, remember what it contributes now. There is no third way to touch the grid.
+func _forget(cell: int) -> void:
+	_grid_sum -= _cell_signature(cell)
+	_account(cell, -1)
+
+func _remember(cell: int) -> void:
+	_grid_sum += _cell_signature(cell)
+	_account(cell, 1)
+
+func _account(cell: int, sign: int) -> void:
+	var player := int(owner_of[cell])
+	if player == NEUTRAL or player >= _t_cells.size():
+		return
+	_t_cells[player] += sign
+	var type := int(building_at[cell])
+	if type == Balance.Building.NONE:
+		return
+	var d: Dictionary = Balance.BUILDINGS[type]
+	# An upgrade multiplies what a building produces. The people it employs do not
+	# change, which is what makes upgrading the answer once land runs out.
+	var lvl := maxi(1, int(level_at[cell]))
+	_t_power_rate[player] += sign * int(d["power_per_tick"]) * lvl
+	_t_coin_cap[player] += sign * int(d["coin_cap"]) * lvl
+	_t_power_cap[player] += sign * int(d["power_cap"]) * lvl
+	_t_people[player] += sign * int(d["people"]) * lvl
+	if int(d["workers"]) > 0:
+		var jobs: PackedInt32Array = _t_jobs[player]
+		if sign > 0:
+			jobs.append(cell)
+		else:
+			var at := jobs.find(cell)
+			if at >= 0:
+				jobs.remove_at(at)
+		_t_jobs[player] = jobs
+	else:
+		_t_coin_rate[player] += sign * int(d["coin_per_tick"]) * lvl
 
 # --- Grid helpers ---
 
@@ -73,18 +176,7 @@ func is_land(cell: int) -> bool:
 	return terrain[cell] == WorldGen.LAND
 
 func neighbours(cell: int) -> Array[int]:
-	var x := cell % width
-	var y := cell / width
-	var out: Array[int] = []
-	if x > 0:
-		out.append(cell - 1)
-	if x < width - 1:
-		out.append(cell + 1)
-	if y > 0:
-		out.append(cell - width)
-	if y < height - 1:
-		out.append(cell + width)
-	return out
+	return WorldGen.neighbours(cell, width, height)
 
 func touches_player(cell: int, player: int) -> bool:
 	for n in neighbours(cell):
@@ -101,38 +193,35 @@ func touches_sea(cell: int) -> bool:
 # --- Derived player figures. Recomputed from the grid on every call by design. ---
 
 func aggregate(player: int) -> Dictionary:
-	var cells := 0
-	var coin_per_tick := 0
-	var power_per_tick := 0
-	var coin_cap := Balance.BASE_COIN_CAP
-	var power_cap := Balance.BASE_POWER_CAP
-	var people := 0
-	var jobs: Array = []   # [level, cell] for each building that needs staffing
-	for i in range(owner_of.size()):
-		if owner_of[i] != player:
-			continue
-		cells += 1
-		var b := int(building_at[i])
-		if b == Balance.Building.NONE:
-			continue
-		var d: Dictionary = Balance.BUILDINGS[b]
-		# An upgrade multiplies what a building produces. The people it employs do not
-		# change, which is what makes upgrading the answer once land runs out.
-		var lvl := maxi(1, int(level_at[i]))
-		power_per_tick += int(d["power_per_tick"]) * lvl
-		coin_cap += int(d["coin_cap"]) * lvl
-		power_cap += int(d["power_cap"]) * lvl
-		people += int(d["people"]) * lvl
-		if int(d["workers"]) > 0:
-			jobs.append([lvl, i])
-		else:
-			coin_per_tick += int(d["coin_per_tick"]) * lvl
+	if player < 0 or player >= _t_cells.size():
+		return {"cells": 0, "coin_per_tick": 0, "power_per_tick": 0,
+			"coin_cap": Balance.BASE_COIN_CAP, "power_cap": Balance.BASE_POWER_CAP,
+			"people": 0, "workers": 0, "free_people": 0, "idle_cells": PackedInt32Array()}
+	var cells := int(_t_cells[player])
+	var people := int(_t_people[player])
+	var power_per_tick := int(_t_power_rate[player])
+	# The flat base income is what keeps a one-cell player in the game, so it is tied to
+	# owning territory at all rather than to any building. On top of it, every cell pays
+	# a little and holds a little, which is what makes taking ground worth something in
+	# its own right rather than only as a way to reach the enemy.
+	var coin_per_tick := int(_t_coin_rate[player]) + cells * Balance.CELL_COIN_PER_TICK
+	if cells > 0:
+		coin_per_tick += Balance.BASE_COIN_PER_TICK
+		power_per_tick += Balance.BASE_POWER_PER_TICK
+	var coin_cap := Balance.BASE_COIN_CAP + int(_t_coin_cap[player]) \
+		+ cells * Balance.CELL_COIN_CAP
+	var power_cap := Balance.BASE_POWER_CAP + int(_t_power_cap[player]) \
+		+ cells * Balance.CELL_POWER_CAP
 
 	# Housing can vanish - losing a house to a capture takes its residents with it - so
 	# there may be more factories than people to work them. Rather than let the surplus
 	# keep producing out of nowhere, the workforce is handed out and whatever is left
 	# over stands idle. The biggest factories are staffed first, which is what a player
-	# would do, and ties break on cell index so both devices reach the same answer.
+	# would do, and ties break on cell index so both devices reach the same answer. Only
+	# the buildings that need staff are sorted here, never the whole map.
+	var jobs: Array = []
+	for cell in (_t_jobs[player] as PackedInt32Array):
+		jobs.append([maxi(1, int(level_at[cell])), int(cell)])
 	jobs.sort_custom(func(a, b): return a[0] > b[0] if a[0] != b[0] else a[1] < b[1])
 	var spare := people
 	var workers := 0
@@ -148,16 +237,6 @@ func aggregate(player: int) -> Dictionary:
 		workers += needed
 		coin_per_tick += int(data["coin_per_tick"]) * int(job[0])
 
-	# The flat base income is what keeps a one-cell player in the game, so it is tied to
-	# owning territory at all rather than to any building. On top of it, every cell pays
-	# a little and holds a little, which is what makes taking ground worth something in
-	# its own right rather than only as a way to reach the enemy.
-	if cells > 0:
-		coin_per_tick += Balance.BASE_COIN_PER_TICK
-		power_per_tick += Balance.BASE_POWER_PER_TICK
-	coin_per_tick += cells * Balance.CELL_COIN_PER_TICK
-	coin_cap += cells * Balance.CELL_COIN_CAP
-	power_cap += cells * Balance.CELL_POWER_CAP
 	return {
 		"cells": cells,
 		"coin_per_tick": coin_per_tick,
@@ -169,6 +248,36 @@ func aggregate(player: int) -> Dictionary:
 		"free_people": spare,
 		"idle_cells": idle,
 	}
+
+# Places or clears a cell outright, keeping the books straight. Not part of playing the
+# game - the rules are in apply_command - but tests and the development preview need to
+# set a board up, and writing to the arrays by hand would leave the totals lying.
+func set_cell(cell: int, owner: int, type: int = Balance.Building.NONE, level: int = 1) -> void:
+	_forget(cell)
+	owner_of[cell] = owner
+	building_at[cell] = type
+	level_at[cell] = 0 if type == Balance.Building.NONE else maxi(1, level)
+	_remember(cell)
+
+# Recounts from the grid and reports anything the running totals got wrong. Empty means
+# the cache is telling the truth. The tests call this after every kind of change.
+func verify_totals() -> Array:
+	var cached := []
+	for p in range(_t_cells.size()):
+		cached.append(aggregate(p))
+	var sum_before := _grid_sum
+	recount()
+	var problems: Array = []
+	if sum_before != _grid_sum:
+		problems.append("grid checksum drifted")
+	for p in range(_t_cells.size()):
+		var fresh: Dictionary = aggregate(p)
+		for key in ["cells", "people", "coin_per_tick", "power_per_tick", "coin_cap",
+				"power_cap", "workers", "free_people"]:
+			if int((cached[p] as Dictionary)[key]) != int(fresh[key]):
+				problems.append("player %d: %s was %d, should be %d" % [p, key,
+					int((cached[p] as Dictionary)[key]), int(fresh[key])])
+	return problems
 
 # --- Commands ---
 
@@ -216,8 +325,10 @@ func _do_build(player: int, cell: int, type: int) -> String:
 		return "not_enough_people"
 	coins[player] -= int(d["coin_cost"])
 	power[player] -= int(d["power_cost"])
+	_forget(cell)
 	building_at[cell] = type
 	level_at[cell] = 1
+	_remember(cell)
 	return ""
 
 func _do_upgrade(player: int, cell: int) -> String:
@@ -239,7 +350,9 @@ func _do_upgrade(player: int, cell: int) -> String:
 		return "not_enough_power"
 	coins[player] -= coin_cost
 	power[player] -= power_cost
+	_forget(cell)
 	level_at[cell] = next_level
+	_remember(cell)
 	return ""
 
 func _do_demolish(player: int, cell: int) -> String:
@@ -251,8 +364,10 @@ func _do_demolish(player: int, cell: int) -> String:
 	if type == Balance.Building.NONE:
 		return "nothing_to_demolish"
 	var invested := Balance.invested_coins(type, maxi(1, int(level_at[cell])))
+	_forget(cell)
 	building_at[cell] = Balance.Building.NONE
 	level_at[cell] = 0
+	_remember(cell)
 	if type == Balance.Building.PORT:
 		_drop_ships_from_port(cell)
 	# Refund is applied after the building is gone, so the new (lower) storage cap clamps
@@ -461,9 +576,11 @@ func _take_cell(player: int, cell: int) -> void:
 	if building_at[cell] == Balance.Building.PORT:
 		_drop_ships_from_port(cell)
 	# Whatever stood there is levelled; the attacker gets bare ground.
+	_forget(cell)
 	building_at[cell] = Balance.Building.NONE
 	level_at[cell] = 0
 	owner_of[cell] = player
+	_remember(cell)
 	if previous != NEUTRAL:
 		_clamp_player(previous)
 		if int(aggregate(previous)["cells"]) == 0:
@@ -479,6 +596,9 @@ func _clamp_player(player: int) -> void:
 func _check_end() -> void:
 	if finished:
 		return
+	# Free play is a world, not a match: nobody to eliminate and no clock to run out.
+	if is_free_play():
+		return
 	var living: Array[int] = []
 	for p in range(alive.size()):
 		if alive[p] == 1:
@@ -487,7 +607,8 @@ func _check_end() -> void:
 		finished = true
 		winner = living[0] if living.size() == 1 else -1
 		return
-	if tick_count >= Balance.MATCH_LIMIT_TICKS:
+	var limit := match_limit_ticks()
+	if limit > 0 and tick_count >= limit:
 		finished = true
 		var best := -1
 		var best_cells := -1
@@ -509,6 +630,7 @@ func snapshot() -> Dictionary:
 	for ship in ships:
 		ship_copy.append(ship.duplicate(true))
 	return {
+		"settings": settings.to_dict() if settings != null else {},
 		"seed": map_seed,
 		"terrain": terrain.duplicate(),
 		"owner": owner_of.duplicate(),
@@ -526,9 +648,10 @@ func snapshot() -> Dictionary:
 
 static func from_snapshot(data: Dictionary) -> GameState:
 	var s := GameState.new()
+	s.settings = WorldSettings.from_dict(data.get("settings", {}))
 	s.map_seed = int(data["seed"])
-	s.width = Balance.MAP_WIDTH
-	s.height = Balance.MAP_HEIGHT
+	s.width = s.settings.width
+	s.height = s.settings.height
 	s.terrain = data["terrain"]
 	s.owner_of = data["owner"]
 	s.building_at = data["building"]
@@ -543,6 +666,9 @@ static func from_snapshot(data: Dictionary) -> GameState:
 	s.tick_count = int(data["tick"])
 	s.finished = bool(data["finished"])
 	s.winner = int(data["winner"])
+	# A snapshot is the one place the totals are counted the slow way: it happens once,
+	# when a client has drifted, and it is the cheapest way to be certain they are right.
+	s.recount()
 	return s
 
 # --- Desync detection: FNV-1a over everything that defines the state. ---
@@ -553,10 +679,9 @@ func state_hash() -> int:
 	var h := 0x4BF29CE484222325
 	h = _hash_int(h, tick_count)
 	h = _hash_int(h, map_seed)
-	for i in range(owner_of.size()):
-		h = _hash_int(h, owner_of[i])
-		h = _hash_int(h, building_at[i])
-		h = _hash_int(h, level_at[i])
+	# The grid goes in as its rolling checksum. Reading a million cells here would have
+	# cost more than the tick that produced them.
+	h = _hash_int(h, _grid_sum)
 	for p in range(coins.size()):
 		h = _hash_int(h, coins[p])
 		h = _hash_int(h, power[p])

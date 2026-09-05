@@ -22,6 +22,7 @@ Design notes (Russian): [Notes/Игра Regions.md](Notes/Игра%20Regions.md)
 | M7 — the lobby redrawn, thirteen tracks | done |
 | M8 — staffing: a factory with nobody in it earns nothing | done |
 | M9 — land pays, so holding ground is worth something | done |
+| M10 — world settings, free play, worlds up to 1000 across | done |
 | M5 — practice match against a bot, three difficulties | done |
 
 Sound effects are synthesised in code at startup rather than shipped as files, so
@@ -40,6 +41,20 @@ un.ps1 -Practice    # straight into a match against the bot
 The desktop build is the same game, mouse instead of finger: drag to pan, wheel to zoom,
 click where you would tap. A PC can host a room that phones join, which is the easiest
 way to test a match.
+
+## Choosing a world
+
+The lobby sets up the world before anyone plays in it: how many cells across (25 up to
+1000), how much of it is water, and how long a match may run. **Free play** is that same
+world with nobody in it - no opponent, no clock, no winning or losing - which is
+somewhere to learn the game and somewhere to just build.
+
+A thousand cells across is a million cells. Two things make that possible. The
+simulation keeps running totals per player, updated by the handful of places that change
+the grid, instead of counting a player's income by walking the map twenty times a
+second; `verify_totals()` recounts the slow way and the tests hold the cache to it. And
+the map view draws only the cells the camera can see. Neither is an optimisation for its
+own sake - without them a big world simply does not run.
 
 ## Playing it
 
