@@ -86,8 +86,11 @@ machine - no network, no second phone.
 Against a person:
 
 1. Build the APK (below) and install it on two phones on the same Wi-Fi.
-2. One player taps **Создать комнату**. The other sees the room in the list and taps it.
-   If the network eats broadcast traffic, type the host's address instead.
+2. One player taps **Создать комнату** and gets a room code - six characters, like
+   `N50-7W3`. The other either sees the room in the list and taps it, or types that code
+   into the box below the list. The code is the host's address written short, so it
+   works even on the networks that quietly drop the broadcast traffic the room list
+   depends on - a phone hotspot, most guest Wi-Fi, and a fair few home routers.
 3. Pick one of the three modes along the bottom of the screen. In **build** mode a tap
    on your own cell opens the build menu, and a tap on a building offers to upgrade or
    demolish it. In **attack** mode a single tap takes a bordering cell; the rate of fire

@@ -28,6 +28,9 @@ signal pause_changed(paused: bool)
 const GAME_PORT := 8910
 const HASH_EVERY := 50
 const HASH_HISTORY := 400
+# ENet keeps knocking at an address that is not answering, and on a phone that means the
+# lobby says "connecting" until the player gives up. After this long, so do we.
+const JOIN_TIMEOUT_MS := 8000
 
 enum Mode { IDLE, HOSTING, JOINING, PLAYING }
 
@@ -37,6 +40,11 @@ var local_player := -1
 var is_host := false
 var paused := false
 var opponent_focus := -1
+
+# While hosting: the address this device is reachable at, and that address written as the
+# six characters the other player types. Both are empty when there is no network.
+var host_address := ""
+var room_code := ""
 
 var discovery := LanDiscovery.new()
 
@@ -61,6 +69,7 @@ var _hash_log: Dictionary = {}         # host only: tick -> hash
 var _peer_of_player: Dictionary = {}   # player index -> multiplayer peer id
 var _local_focus := -1
 var _focus_timer := 0.0
+var _join_deadline := 0
 
 func _ready() -> void:
 	multiplayer.peer_connected.connect(_on_peer_connected)
@@ -76,28 +85,53 @@ func host_room(room_name: String, world: WorldSettings = null) -> bool:
 	leave()
 	settings = chosen
 	var peer := ENetMultiplayerPeer.new()
-	if peer.create_server(GAME_PORT, 1) != OK:
-		emit_signal("lobby_status", I18n.t("connect_failed"))
+	var err := peer.create_server(GAME_PORT, 1)
+	if err != OK:
+		# The port is the only thing that ever stops this, and saying so matters: "could
+		# not connect" sends people off to look at a router that is working fine, when the
+		# answer is the previous match still holding the port for another second.
+		var busy := err == ERR_ALREADY_IN_USE or err == ERR_CANT_CREATE
+		emit_signal("lobby_status", I18n.t("port_busy" if busy else "connect_failed"))
 		return false
 	multiplayer.multiplayer_peer = peer
 	is_host = true
 	mode = Mode.HOSTING
-	discovery.start_broadcast(room_name, GAME_PORT)
-	emit_signal("lobby_status", I18n.t("waiting_player"))
+	var addresses := LanDiscovery.local_ipv4s()
+	host_address = addresses[0] if addresses.size() > 0 else ""
+	room_code = RoomCode.encode(host_address)
+	discovery.start_broadcast(room_name, GAME_PORT, room_code)
+	emit_signal("lobby_status", I18n.t("waiting_player") if not host_address.is_empty() else I18n.t("no_address"))
 	return true
 
 func browse_rooms() -> void:
 	discovery.start_listen()
 
-func join_room(ip: String) -> bool:
+# A code or an address, whichever the player typed - the code is only the host address
+# written short, so both roads end at the same place. Returns "" when it is neither.
+static func resolve(target: String) -> String:
+	var text := target.strip_edges()
+	if text.is_empty():
+		return ""
+	if RoomCode.looks_like_code(text):
+		return RoomCode.decode(text)
+	if LanDiscovery.is_ipv4(text) or text.contains("."):
+		return text
+	return ""
+
+func join_room(target: String) -> bool:
+	var address := resolve(target)
+	if address.is_empty():
+		emit_signal("lobby_status", I18n.t("bad_code"))
+		return false
 	leave()
 	var peer := ENetMultiplayerPeer.new()
-	if peer.create_client(ip, GAME_PORT) != OK:
+	if peer.create_client(address, GAME_PORT) != OK:
 		emit_signal("lobby_status", I18n.t("connect_failed"))
 		return false
 	multiplayer.multiplayer_peer = peer
 	is_host = false
 	mode = Mode.JOINING
+	_join_deadline = Time.get_ticks_msec() + JOIN_TIMEOUT_MS
 	emit_signal("lobby_status", I18n.t("connecting"))
 	return true
 
@@ -117,6 +151,9 @@ func leave() -> void:
 	local_player = -1
 	opponent_focus = -1
 	opponent_name = ""
+	host_address = ""
+	room_code = ""
+	_join_deadline = 0
 	save_label = ""
 	_pending.clear()
 	_hash_log.clear()
@@ -275,6 +312,7 @@ func _refused(reason: String) -> void:
 func _process(delta: float) -> void:
 	if discovery.poll():
 		emit_signal("rooms_changed")
+	_check_join_timeout()
 	_report_focus(delta)
 	if mode != Mode.PLAYING or not is_host or paused or state == null or state.finished:
 		return
@@ -287,6 +325,16 @@ func _process(delta: float) -> void:
 		_host_tick()
 	if budget == 0:
 		_accumulator = 0.0
+
+# ENet answers a wrong address with silence rather than a refusal, so the lobby needs a
+# clock of its own: nobody home by now means nobody home.
+func _check_join_timeout() -> void:
+	if mode != Mode.JOINING or _join_deadline == 0:
+		return
+	if Time.get_ticks_msec() < _join_deadline:
+		return
+	leave()
+	emit_signal("connection_lost", I18n.t("no_answer"))
 
 func _host_tick() -> void:
 	_let_bot_play()

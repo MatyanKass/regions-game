@@ -23,6 +23,9 @@ var _address: LineEdit
 var _level_button: OptionButton
 var _size_note: Label
 var _saves_box: VBoxContainer
+var _code_card: PanelContainer
+var _code_label: Label
+var _code_note: Label
 
 func _ready() -> void:
 	var paper := UiKit.Paper.new()
@@ -62,11 +65,21 @@ func _ready() -> void:
 
 	Net.rooms_changed.connect(_refresh_rooms)
 	Net.lobby_status.connect(func(text: String): _status.text = text)
-	Net.connection_lost.connect(func(text: String): _status.text = text)
+	Net.connection_lost.connect(func(text: String):
+		_status.text = text
+		# Leaving a match - or giving up on one that never answered - closes the listening
+		# socket with everything else, and a lobby that is not listening never finds a room
+		# again.
+		Net.browse_rooms()
+		_refresh_code()
+		_refresh_rooms())
 	Music.set_mood("calm")
 	Net.browse_rooms()
 	_refresh_rooms()
 	_refresh_saves()
+	# Hosting survives this screen being rebuilt - a language change does that - so the
+	# code has to come back with it rather than quietly vanish while the room is up.
+	_refresh_code()
 
 func _menu_column() -> Control:
 	var column := VBoxContainer.new()
@@ -129,6 +142,9 @@ func _card_contents() -> Control:
 	host.pressed.connect(_on_host)
 	box.add_child(host)
 
+	_code_card = _room_code_card()
+	box.add_child(_code_card)
+
 	box.add_child(_divider(I18n.t("saves")))
 	_saves_box = VBoxContainer.new()
 	_saves_box.add_theme_constant_override("separation", 6)
@@ -146,7 +162,9 @@ func _card_contents() -> Control:
 	var manual := HBoxContainer.new()
 	manual.add_theme_constant_override("separation", 8)
 	_address = LineEdit.new()
-	_address.placeholder_text = "192.168.0.10"
+	# A code is what the other screen is showing; an address still works for anyone who
+	# would rather read one out, and both go through the same box.
+	_address.placeholder_text = I18n.t("code_or_address")
 	_address.custom_minimum_size.y = 42
 	_address.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	UiKit.line_edit(_address)
@@ -317,6 +335,62 @@ func _load_save(slot: String, label: String) -> void:
 	Net.resume(state, SaveGame.bot_level_of(slot))
 	Net.save_label = label
 
+# What the host shows while it waits: six characters the other player can type, the
+# address they stand for, and a way out of hosting again.
+func _room_code_card() -> PanelContainer:
+	var card := PanelContainer.new()
+	UiKit.panel(card)
+	card.visible = false
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	card.add_child(box)
+
+	var title := UiKit.body(I18n.t("room_code"), 13, Ink.INK_SOFT)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+
+	_code_label = UiKit.heading("", 40, Ink.PENS[0])
+	_code_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_code_label)
+
+	_code_note = UiKit.body("", 12, Ink.INK_SOFT)
+	_code_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_code_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_code_note)
+
+	var stop := Button.new()
+	stop.text = I18n.t("stop_hosting")
+	stop.custom_minimum_size.y = 38
+	UiKit.button(stop, Ink.PENS[1])
+	stop.pressed.connect(_on_stop_hosting)
+	box.add_child(stop)
+	return card
+
+func _refresh_code() -> void:
+	if _code_card == null:
+		return
+	_code_card.visible = Net.mode == Net.Mode.HOSTING
+	if not _code_card.visible:
+		return
+	if not Net.room_code.is_empty():
+		_code_label.text = Net.room_code
+		_code_note.text = "%s\n%s" % [I18n.t("code_hint"), Net.host_address]
+	elif not Net.host_address.is_empty():
+		# A network outside the ranges a code can carry - an office, or a VPN. The
+		# address itself is still perfectly typeable.
+		_code_label.text = Net.host_address
+		_code_note.text = I18n.t("code_hint")
+	else:
+		_code_label.text = "—"
+		_code_note.text = I18n.t("no_address")
+
+func _on_stop_hosting() -> void:
+	Net.leave()
+	Net.browse_rooms()
+	_status.text = ""
+	_refresh_code()
+	_refresh_rooms()
+
 func _on_practice() -> void:
 	Net.start_practice(bot_level, 0, _chosen_world())
 
@@ -326,11 +400,12 @@ func _on_free_play() -> void:
 func _on_host() -> void:
 	if Net.host_room(_default_room_name(), _chosen_world()):
 		_status.text = I18n.t("waiting_player")
+	_refresh_code()
 
-func _join(ip: String) -> void:
-	if ip.is_empty():
+func _join(target: String) -> void:
+	if target.is_empty():
 		return
-	Net.join_room(ip)
+	Net.join_room(target)
 
 func _default_room_name() -> String:
 	return Prefs.display_name()
@@ -349,7 +424,12 @@ func _refresh_rooms() -> void:
 	for ip in addresses:
 		var room: Dictionary = Net.discovery.rooms[ip]
 		var button := Button.new()
-		button.text = "%s   ·   %s" % [str(room["name"]), ip]
+		# The code, not the address: it is what the other screen is showing, so the two
+		# can be checked against each other before anyone taps anything.
+		var label := str(room.get("code", ""))
+		if label.is_empty():
+			label = str(ip)
+		button.text = "%s   ·   %s" % [str(room["name"]), label]
 		button.custom_minimum_size.y = 44
 		UiKit.button(button, Ink.PENS[0])
 		button.pressed.connect(func(): _join(str(ip)))
