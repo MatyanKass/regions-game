@@ -7,6 +7,10 @@ static var language := "ru"
 
 const STRINGS := {
 	"app_title": {"ru": "Regions", "en": "Regions"},
+	# The game is called "Regions :Beta Edition" - the second half sits under the title
+	# as a badge rather than in it, because at 54 points the whole name is wider than a
+	# phone held upright.
+	"edition": {"ru": ":Beta Edition", "en": ":Beta Edition"},
 	"host_game": {"ru": "Создать комнату", "en": "Host a room"},
 	"free_play": {"ru": "Свободная игра", "en": "Free play"},
 	"world": {"ru": "Мир", "en": "World"},
@@ -24,6 +28,35 @@ const STRINGS := {
 		"en": "A grid strategy for two. Build up, save power, take ground."},
 	"rooms": {"ru": "Комнаты в сети", "en": "Rooms on the network"},
 	"room_code": {"ru": "Код комнаты", "en": "Room code"},
+	"players_in_room": {"ru": "Игроки", "en": "Players"},
+	"room_size": {"ru": "Мест в комнате", "en": "Seats"},
+	"start_match": {"ru": "Начать матч", "en": "Start the match"},
+	"waiting_host": {"ru": "Ждём, пока хост начнёт", "en": "Waiting for the host to start"},
+	"in_room": {"ru": "Вы в комнате", "en": "You are in the room"},
+	"room_full": {"ru": "Комната уже заполнена", "en": "That room is full"},
+	"need_two": {"ru": "Нужен хотя бы ещё один игрок", "en": "At least one more player is needed"},
+	"player": {"ru": "Игрок", "en": "Player"},
+	"player_gone": {"ru": "вышел из игры", "en": "has left the game"},
+	"player_left_toast": {"ru": "%s вышел", "en": "%s has left"},
+	"joining": {"ru": "заходит…", "en": "joining…"},
+	"crowded_hint": {"ru": "Много игроков на маленькой карте — стартовые клетки будут рядом. Возьми карту побольше.",
+		"en": "That many players on a small map start close together. Take a bigger one."},
+
+	# Where a player is playing from. The choice is a palette, not a colour: which of a
+	# region's colours you get is rolled when the match starts.
+	"country": {"ru": "Страна", "en": "Country"},
+	"pick_country": {"ru": "Откуда играешь?", "en": "Where are you playing from?"},
+	"pick_country_hint": {"ru": "Цвет твоих клеток берётся из палитры региона",
+		"en": "Your cells take their colour from the region's palette"},
+	"region_any": {"ru": "Не выбрано", "en": "Not chosen"},
+	"region_africa": {"ru": "Африка", "en": "Africa"},
+	"region_europe": {"ru": "Европа", "en": "Europe"},
+	"region_asia": {"ru": "Азия", "en": "Asia"},
+	"region_middle_east": {"ru": "Ближний Восток", "en": "Middle East"},
+	"region_latin_america": {"ru": "Латинская Америка", "en": "Latin America"},
+	"region_north_america": {"ru": "Северная Америка", "en": "North America"},
+	"region_nordic": {"ru": "Скандинавия", "en": "Nordics"},
+	"region_oceania": {"ru": "Океания", "en": "Oceania"},
 	"code_hint": {"ru": "Продиктуй его второму игроку — он вводит код ниже",
 		"en": "Read it out to the other player; they type it in below"},
 	"code_or_address": {"ru": "Код комнаты или адрес", "en": "Room code or address"},

@@ -25,6 +25,8 @@ var map_view: MapView
 var camera: Camera2D
 
 var _hud: CanvasLayer
+var _standings: HBoxContainer
+var _standing_labels: Array[Label] = []
 var _chips: Dictionary = {}         # name -> UiKit.Chip
 var _clock: Label
 var _toast: Label
@@ -80,6 +82,8 @@ func _ready() -> void:
 	Net.command_refused.connect(_on_refused)
 	Net.command_applied.connect(_on_command_applied)
 	Net.opponent_disconnected.connect(_on_opponent_disconnected)
+	Net.player_left.connect(func(player: int):
+		_show_toast(I18n.t("player_left_toast") % _name_of(player)))
 	Net.connection_lost.connect(_on_connection_lost)
 	Net.pause_changed.connect(_on_pause_changed)
 	_refresh_stats()
@@ -94,12 +98,18 @@ func _centre_on_home() -> void:
 			return
 	camera.position = map_view.map_size() * 0.5
 
-# In a practice match the other seat is the bot, and saying so is the difference between
-# "the opponent is quiet" and "the bot is thinking".
+# What to call a seat: the name from the room, "Бот" for the machine, and a numbered
+# player for anyone who never said. In a crowd this is the only way a panel can be about
+# somebody rather than about "the opponent".
+func _name_of(player: int) -> String:
+	if player == Net.local_player:
+		return Prefs.display_name()
+	return Net.name_of(player)
+
+# The one other player, when there is one. Empty in a crowd, where no single name fits.
 func _opponent_name() -> String:
-	if Net.bot != null:
-		return "%s (%s)" % [I18n.t("bot"), I18n.bot_level_name(Net.bot.level)]
-	return Net.opponent_name if not Net.opponent_name.is_empty() else I18n.t("opponent")
+	var other := Net.opponent_index()
+	return _name_of(other) if other >= 0 else I18n.t("opponent")
 
 # --- HUD construction ------------------------------------------------------------
 
@@ -122,7 +132,7 @@ func _build_top_bar() -> void:
 	top.add_child(row)
 
 	for entry in [["coins", Ink.Icon.COIN], ["power", Ink.Icon.POWER], ["people", Ink.Icon.PEOPLE]]:
-		var chip := UiKit.chip(int(entry[1]), Ink.pen_of(Net.local_player))
+		var chip := UiKit.chip(int(entry[1]), Ink.pen_for(Net.state, Net.local_player))
 		_chips[str(entry[0])] = chip
 		row.add_child(chip)
 
@@ -130,6 +140,12 @@ func _build_top_bar() -> void:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
 
+	# With three or more countries on the map, who is ahead is not something you can see
+	# by looking at your own corner of it.
+	_standings = HBoxContainer.new()
+	_standings.add_theme_constant_override("separation", 12)
+	_standings.visible = Net.state != null and Net.state.player_count() > 2
+	row.add_child(_standings)
 	row.add_child(UiKit.glyph_for_icon(Ink.Icon.CLOCK, 20, Ink.INK_SOFT))
 	_clock = UiKit.heading("", 17, Ink.INK_SOFT)
 	row.add_child(_clock)
@@ -193,7 +209,7 @@ func _build_bottom_bar() -> void:
 	_cooldown_bar.add_theme_stylebox_override("background",
 		UiKit.box(Ink.PAPER_DARK, Ink.SLOT_DARK, 1, 4, 0))
 	_cooldown_bar.add_theme_stylebox_override("fill",
-		UiKit.box(Ink.pen_of(Net.local_player), Ink.pen_of(Net.local_player), 0, 4, 0))
+		UiKit.box(Ink.pen_for(Net.state, Net.local_player), Ink.pen_for(Net.state, Net.local_player), 0, 4, 0))
 	reload_row.add_child(_cooldown_bar)
 
 	_hint = UiKit.body("", 13, Ink.INK_SOFT)
@@ -326,7 +342,7 @@ func set_mode(mode: int) -> void:
 	for key in _mode_buttons:
 		var button: Button = _mode_buttons[key]
 		var selected := int(key) == mode
-		UiKit.button(button, Ink.pen_of(Net.local_player) if selected else Ink.INK, selected)
+		UiKit.button(button, Ink.pen_for(Net.state, Net.local_player) if selected else Ink.INK, selected)
 		_tint(button, Ink.PAPER if selected else Ink.INK)
 	match mode:
 		Mode.BUILD:
@@ -357,7 +373,7 @@ func _process(delta: float) -> void:
 			_toast.visible = false
 	if Net.state == null:
 		return
-	map_view.opponent_focus = Net.opponent_focus
+	map_view.focus_of = Net.focus_of
 	Net.set_local_focus(map_view.cell_at(camera.position))
 	_update_clock()
 	_update_cooldown()
@@ -462,15 +478,40 @@ func _watch_for_losses() -> void:
 		Sfx.play("lost_cell")
 		_note_fighting()
 	_known_cells = cells
-	var enemy := int(Net.state.aggregate(Net.opponent_index())["cells"])
+	# Everyone else's ground, added up: somebody losing a cell anywhere means fighting.
+	var enemy := 0
+	for player in Net.others():
+		enemy += int(Net.state.aggregate(player)["cells"])
 	if _known_enemy_cells > 0 and enemy < _known_enemy_cells:
 		_note_fighting()
 	_known_enemy_cells = enemy
+
+# One entry per country, in seat order so it never reshuffles under a glance: the name
+# in that player's own pen, and how much ground they hold.
+func _refresh_standings() -> void:
+	var st := Net.state
+	if _standings == null or not _standings.visible or st == null:
+		return
+	if _standing_labels.size() != st.player_count():
+		for child in _standings.get_children():
+			child.queue_free()
+		_standing_labels = []
+		for player in range(st.player_count()):
+			var label := UiKit.body("", 13, Ink.pen_for(st, player))
+			_standings.add_child(label)
+			_standing_labels.append(label)
+	for player in range(_standing_labels.size()):
+		var name := _name_of(player)
+		if name.length() > 9:
+			name = name.substr(0, 8) + "…"
+		var mark := "" if st.alive[player] == 1 else " ✕"
+		_standing_labels[player].text = "%s %d%s" % [name, int(st.aggregate(player)["cells"]), mark]
 
 func _refresh_stats() -> void:
 	var st := Net.state
 	if st == null:
 		return
+	_refresh_standings()
 	var me := Net.local_player
 	var agg := st.aggregate(me)
 	var per_second := float(Balance.TICKS_PER_SECOND) / float(Balance.UNIT)
@@ -641,14 +682,16 @@ func _tap_info(st: GameState, cell: int) -> void:
 	else:
 		var agg := st.aggregate(owner_id)
 		var per_second := float(Balance.TICKS_PER_SECOND) / float(Balance.UNIT)
-		lines.append(Prefs.display_name() if owner_id == Net.local_player else _opponent_name())
+		lines.append(_name_of(owner_id))
+		if not Net.is_here(owner_id):
+			lines.append(I18n.t("player_gone"))
 		lines.append("%s: %d" % [I18n.t("cells"), int(agg["cells"])])
 		lines.append("%s: +%.1f/%s" % [I18n.t("coin_rate"),
 			float(agg["coin_per_tick"]) * per_second, I18n.t("second")])
 		lines.append("%s: +%.1f/%s" % [I18n.t("power_rate"),
 			float(agg["power_per_tick"]) * per_second, I18n.t("second")])
 		lines.append("%s: %d/%d" % [I18n.t("people"), int(agg["free_people"]), int(agg["people"])])
-		if owner_id != Net.local_player and Net.opponent_focus >= 0:
+		if owner_id != Net.local_player and Net.focus_cell_of(owner_id) >= 0:
 			lines.append(I18n.t("look_here"))
 	var type := int(st.building_at[cell])
 	if type != Balance.Building.NONE:
@@ -727,21 +770,27 @@ func _on_finished() -> void:
 	_add_overlay_action(I18n.t("back_to_menu"), func(): emit_signal("exit_requested"))
 	_overlay.visible = true
 
-# How it ended and what the two sides finished with, so the result is a scoreline rather
-# than a single word.
+# How it ended and where everyone finished: a line per country, most ground first, so a
+# match of five reads as a table rather than as one word.
 func _result_summary(st: GameState) -> String:
-	var mine := st.aggregate(Net.local_player)
-	var theirs := st.aggregate(Net.opponent_index())
 	var seconds := st.tick_count / Balance.TICKS_PER_SECOND
 	var reason := I18n.t("ended_time") if st.tick_count >= st.match_limit_ticks() \
 		else I18n.t("ended_eliminated")
-	return "%s\n\n%s: %d — %d\n%s: %d — %d\n%s %d:%02d" % [
-		reason,
-		I18n.t("cells"), int(mine["cells"]), int(theirs["cells"]),
-		I18n.t("buildings"), _count_buildings(st, Net.local_player),
-		_count_buildings(st, Net.opponent_index()),
-		I18n.t("played"), seconds / 60, seconds % 60,
-	]
+	var rows: Array = []
+	for player in range(st.player_count()):
+		rows.append({"player": player, "cells": int(st.aggregate(player)["cells"]),
+			"buildings": _count_buildings(st, player)})
+	rows.sort_custom(func(a, b): return int(a["cells"]) > int(b["cells"]))
+	var lines: Array[String] = [reason, ""]
+	for row in rows:
+		var player := int(row["player"])
+		lines.append("%s%s — %s %d, %s %d" % [
+			_name_of(player), "" if st.alive[player] == 1 else " ✕",
+			I18n.t("cells"), int(row["cells"]),
+			I18n.t("buildings"), int(row["buildings"])])
+	lines.append("")
+	lines.append("%s %d:%02d" % [I18n.t("played"), seconds / 60, seconds % 60])
+	return "\n".join(lines)
 
 func _count_buildings(st: GameState, player: int) -> int:
 	var total := 0

@@ -16,6 +16,10 @@ var music_volume := 0.7
 var sfx_volume := 0.9
 var language := ""   # empty means "follow the system"
 var nickname := ""   # empty means "whatever this device is called"
+# Where the player is playing from. It is what their colour is rolled out of, and it is
+# remembered rather than asked for every match. -1 means they have not chosen yet, which
+# is what puts the picker in front of them the first time.
+var region_choice := -1
 
 func _ready() -> void:
 	_ensure_bus(MUSIC_BUS)
@@ -55,6 +59,17 @@ func display_name() -> String:
 	var model := OS.get_model_name()
 	return model if not model.is_empty() else "Regions"
 
+func set_region(value: int) -> void:
+	region_choice = value if Regions.valid(value) else -1
+	save()
+	emit_signal("changed")
+
+func region() -> int:
+	return region_choice if Regions.valid(region_choice) else Regions.NONE
+
+func has_region() -> bool:
+	return Regions.valid(region_choice)
+
 func set_language(code: String) -> void:
 	language = code
 	I18n.language = code
@@ -82,6 +97,7 @@ func load_now() -> void:
 		sfx_volume = clampf(float(file.get_value("audio", "sfx", sfx_volume)), 0.0, 1.0)
 		language = str(file.get_value("ui", "language", ""))
 		nickname = str(file.get_value("ui", "nickname", ""))
+		region_choice = int(file.get_value("ui", "region", -1))
 	if language.is_empty():
 		I18n.detect_language()
 		language = I18n.language
@@ -95,4 +111,5 @@ func save() -> void:
 	file.set_value("audio", "sfx", sfx_volume)
 	file.set_value("ui", "language", language)
 	file.set_value("ui", "nickname", nickname)
+	file.set_value("ui", "region", region_choice)
 	file.save(PATH)

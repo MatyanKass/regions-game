@@ -1,4 +1,4 @@
-# Regions
+# Regions :Beta Edition
 
 Мобильная игра.
 

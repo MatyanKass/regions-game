@@ -16,7 +16,11 @@ func _ready() -> void:
 	Net.match_started.connect(_open_match)
 	var args := OS.get_cmdline_user_args()
 	if args.has("--autoplay-host") or args.has("--autoplay-join"):
-		_start_autoplay(args.has("--autoplay-join"))
+		var seats := 2
+		for arg in args:
+			if arg.begins_with("--autoplay-seats="):
+				seats = maxi(2, int(arg.substr(17)))
+		_start_autoplay(args.has("--autoplay-join"), seats)
 		return
 	for arg in args:
 		if arg.begins_with("--shot="):
@@ -134,8 +138,9 @@ func _stock_preview() -> void:
 		st.alive[1] = 0
 
 # Headless self-play for tools/run_net_test.ps1. Never reached in a normal run.
-func _start_autoplay(joining: bool) -> void:
+func _start_autoplay(joining: bool, seats: int) -> void:
 	var robot: Node = load("res://src/net/autoplay.gd").new()
+	robot.seats = seats
 	robot.joining = joining
 	add_child(robot)
 

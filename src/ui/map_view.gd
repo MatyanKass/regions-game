@@ -9,7 +9,8 @@ var state: GameState = null
 var local_player := 0
 var selected := -1
 var ship_targets := PackedInt32Array()
-var opponent_focus := -1
+# Where every other player is looking, one entry per seat, -1 for "has not said".
+var focus_of := PackedInt32Array()
 var attack_mode := false
 var cooldown_left := 0
 
@@ -93,10 +94,11 @@ func _draw() -> void:
 		Ink.rect(self, cell_rect(selected).grow(-3.0), Ink.INK, 3.0)
 
 	for target in ship_targets:
-		Ink.rect(self, cell_rect(target).grow(-8.0), Ink.pen_of(local_player), 3.0)
+		Ink.rect(self, cell_rect(target).grow(-8.0), Ink.pen_for(state, local_player), 3.0)
 
-	if opponent_focus >= 0:
-		_draw_focus_marker(opponent_focus)
+	for player in range(focus_of.size()):
+		if player != local_player and int(focus_of[player]) >= 0:
+			_draw_focus_marker(int(focus_of[player]), player)
 
 	Ink.rect(self, full, Ink.INK, 4.0)
 
@@ -107,7 +109,7 @@ func _draw_territory(view: Rect2i) -> void:
 			var owner_id := int(state.owner_of[i])
 			if owner_id == GameState.NEUTRAL:
 				continue
-			var pen := Ink.pen_of(owner_id)
+			var pen := Ink.pen_for(state, owner_id)
 			draw_rect(cell_rect(i), Color(pen.r, pen.g, pen.b, 0.15), true)
 
 	# Borders are drawn per edge so a territory reads as one outlined shape, the way a
@@ -118,7 +120,7 @@ func _draw_territory(view: Rect2i) -> void:
 			var owner_id := int(state.owner_of[i])
 			if owner_id == GameState.NEUTRAL:
 				continue
-			var pen := Ink.pen_of(owner_id)
+			var pen := Ink.pen_for(state, owner_id)
 			var r := cell_rect(i)
 			if x == 0 or state.owner_of[i - 1] != owner_id:
 				Ink.line(self, r.position, r.position + Vector2(0, CELL), pen, 4.0)
@@ -137,7 +139,7 @@ func _draw_buildings(view: Rect2i) -> void:
 			var type := int(state.building_at[i])
 			if type == Balance.Building.NONE:
 				continue
-			var pen := Ink.pen_of(int(state.owner_of[i]))
+			var pen := Ink.pen_for(state, int(state.owner_of[i]))
 			var r := cell_rect(i)
 			var stopped := idle.has(i)
 			# A building with nobody in it is drawn faint: at a glance the working half
@@ -168,7 +170,7 @@ func _draw_sites(view: Rect2i) -> void:
 		var y := cell / state.width
 		if x < view.position.x or x >= view.end.x or y < view.position.y or y >= view.end.y:
 			continue
-		var pen := Ink.pen_of(int(site["owner"]))
+		var pen := Ink.pen_for(state, int(site["owner"]))
 		var r := cell_rect(cell)
 		Ink.draw_building(self, int(site["type"]), r.grow(-CELL * 0.22),
 			Color(pen.r, pen.g, pen.b, 0.30), 2.0)
@@ -190,7 +192,7 @@ func _draw_ships() -> void:
 		var progress := float(ship["ticks"]) / float(Balance.SHIP_TICKS_PER_CELL)
 		var a := cell_rect(from_cell).get_center()
 		var b := cell_rect(to_cell).get_center()
-		var pen := Ink.pen_of(int(ship["owner"]))
+		var pen := Ink.pen_for(state, int(ship["owner"]))
 		# The wake is the route still to sail, which bends round headlands.
 		var wake := PackedVector2Array([a])
 		for i in range(step, path.size()):
@@ -203,7 +205,7 @@ func _draw_ships() -> void:
 # matter of tapping a marked square rather than guessing what borders what. The ring
 # fades while the capture is reloading, which is the cooldown made visible on the map.
 func _draw_attack_targets(view: Rect2i) -> void:
-	var pen := Ink.pen_of(local_player)
+	var pen := Ink.pen_for(state, local_player)
 	var alpha := 0.25 if cooldown_left > 0 else 0.85
 	for y in range(view.position.y, view.end.y):
 		for x in range(view.position.x, view.end.x):
@@ -219,8 +221,8 @@ func _draw_attack_targets(view: Rect2i) -> void:
 func is_land(cell: int) -> bool:
 	return state.terrain[cell] == WorldGen.LAND
 
-func _draw_focus_marker(cell: int) -> void:
-	var pen := Ink.pen_of(1 - local_player)
+func _draw_focus_marker(cell: int, player: int) -> void:
+	var pen := Ink.pen_for(state, player)
 	var r := cell_rect(cell)
 	var centre := r.get_center()
 	Ink.circle(self, centre, CELL * 0.55, Color(pen.r, pen.g, pen.b, 0.55), 3.0, 16)

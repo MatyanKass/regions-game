@@ -5,7 +5,7 @@ config_version=5
 
 [application]
 
-config/name="Regions"
+config/name="Regions :Beta Edition"
 config/description="Notebook-style 2D grid strategy for two players over LAN."
 config/features=PackedStringArray("4.7", "GL Compatibility")
 run/main_scene="res://src/ui/main.tscn"

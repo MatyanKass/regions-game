@@ -1,6 +1,7 @@
-# Regions
+# Regions :Beta Edition
 
-Notebook-style 2D grid strategy for two players over a local network, on Android.
+Notebook-style 2D grid strategy for two to eight players over a local network, on
+Android.
 
 Build houses, factories, banks, barracks, military bases and ports on your cells; spend
 power to take a bordering cell, or send a ship straight across open water to land on a
@@ -83,20 +84,30 @@ own sake - without them a big world simply does not run.
 Alone, tap **Игра с ботом**, pick a difficulty and you are in a match against the
 machine - no network, no second phone.
 
-Against a person:
+Against people:
 
-1. Build the APK (below) and install it on two phones on the same Wi-Fi.
-2. One player taps **Создать комнату** and gets a room code - six characters, like
-   `N50-7W3`. The other either sees the room in the list and taps it, or types that code
-   into the box below the list. The code is the host's address written short, so it
-   works even on the networks that quietly drop the broadcast traffic the room list
-   depends on - a phone hotspot, most guest Wi-Fi, and a fair few home routers.
-3. Pick one of the three modes along the bottom of the screen. In **build** mode a tap
+0. Pick where you are playing from. The first run asks; the lobby lets you change it.
+   A region is a palette rather than a colour - Africa is yellow, orange or red - and
+   which of them your cells come out in is rolled when the match starts, so two people
+   from the same continent still get their own pen.
+1. Build the APK (below) and install it on the phones, all on the same Wi-Fi.
+2. One player sets the number of seats (two to eight), taps **Создать комнату** and
+   gets a room code - six characters, like `N50-7W3`. The others either see the room in
+   the list and tap it, or type that code into the box below the list. The code is the
+   host's address written short, so it works even on the networks that quietly drop the
+   broadcast traffic the room list depends on - a phone hotspot, most guest Wi-Fi, and a
+   fair few home routers.
+3. Everyone who is in shows up in the host's room list, in their own colour. The host
+   taps **Начать матч** when the room is full enough; the seats become the player order.
+   A match of three or more shows a running scoreline along the top, and one player
+   leaving no longer stops the game - their country simply stands there.
+4. Pick one of the three modes along the bottom of the screen. In **build** mode a tap
    on your own cell opens the build menu, and a tap on a building offers to upgrade or
    demolish it. In **attack** mode a single tap takes a bordering cell; the rate of fire
    is limited by a cooldown, a quarter of a second on open ground and four tenths on an
    enemy cell. In **info** mode a tap reports who owns a cell and how they are doing.
-   The match ends when one side has no cells left, or after 40 minutes.
+   The match ends when one country is left, or after the time the host set - and then
+   the closing screen is a table of everybody, most ground first.
 
 ## Layout
 

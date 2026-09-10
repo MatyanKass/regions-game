@@ -28,8 +28,11 @@ const MARGIN := Color("d08a86")
 # "this belongs to the red player".
 const ALERT := Color("e0341c")
 
-# Player pen colours: blue biro and red biro, the two pens everyone had at school.
-const PENS := [Color("1b4fa0"), Color("bd2f22")]
+# Player pen colours: blue biro and red biro first, the two pens everyone had at school,
+# then six more for a full room. These are the fallback - what a seat is drawn in when
+# nobody picked a region for it. See Regions.
+const PENS := [Color("1b4fa0"), Color("bd2f22"), Color("1f7a4d"), Color("c8961b"),
+	Color("6b3fa0"), Color("0f7f8f"), Color("e2701e"), Color("55617a")]
 
 # Panels are paper laid on paper rather than a dark HUD: the game is a notebook.
 const PAPER_PANEL := Color("fbf7ea")
@@ -41,9 +44,20 @@ const SLOT_DARK := Color("a89c7e")
 const DISABLED := Color(1, 1, 1, 0.35)
 
 static func pen_of(player: int) -> Color:
-	if player < 0 or player >= PENS.size():
+	if player < 0:
 		return INK_SOFT
-	return PENS[player]
+	return PENS[player % PENS.size()]
+
+# The pen a player is actually drawn in: the colour their region gave them, and the flat
+# fallback above when there is no state to ask or nobody chose.
+static func pen_for(state: GameState, player: int) -> Color:
+	if player < 0:
+		return INK_SOFT
+	if state != null:
+		var tint := state.tint_of(player)
+		if tint != 0:
+			return Regions.colour_to_ink(tint)
+	return pen_of(player)
 
 # --- Hand drawn strokes -----------------------------------------------------------
 

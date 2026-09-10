@@ -1,7 +1,10 @@
-# A robot player used only by tools/run_net_test.ps1. Two headless instances host and
-# join over the loopback, play a scripted match against each other and print their
-# final state hash. Equal hashes mean the lockstep really holds end to end - the one
-# thing the simulation tests cannot prove on their own.
+# A robot player used only by tools/run_net_test.ps1. Headless instances host and join
+# over the loopback, play a scripted match against each other and print their final state
+# hash. Equal hashes mean the lockstep really holds end to end - the one thing the
+# simulation tests cannot prove on their own.
+#
+# --autoplay-seats=N makes the host wait for N players before starting, which is how a
+# room of three or more is tested with real sockets rather than argued about.
 #
 # Enabled only by a command line flag, so it can never affect a real match.
 extends Node
@@ -10,6 +13,7 @@ const STOP_AT_TICK := 200
 const ACT_EVERY_TICKS := 6
 
 var joining := false
+var seats := 2
 
 var _retries := 0
 var _retry_timer := 0.0
@@ -21,7 +25,9 @@ func _ready() -> void:
 	if joining:
 		_try_join()
 	else:
-		Net.host_room("autoplay-host")
+		var world := WorldSettings.new()
+		world.players = seats
+		Net.host_room("autoplay-host", world)
 	Net.match_advanced.connect(_on_advanced)
 	Net.connection_lost.connect(func(reason: String):
 		if _done:
@@ -36,6 +42,11 @@ func _process(delta: float) -> void:
 		_quit_timer -= delta
 		if _quit_timer <= 0.0:
 			get_tree().quit(0)
+		return
+	# The host now waits for somebody to press start rather than beginning the moment a
+	# phone knocks, so the robot presses it itself.
+	if not joining and Net.mode == Net.Mode.HOSTING and Net.room_size() >= seats:
+		Net.start_room()
 		return
 	if not joining or Net.mode == Net.Mode.PLAYING:
 		return

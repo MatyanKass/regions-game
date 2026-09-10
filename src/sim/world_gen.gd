@@ -12,6 +12,15 @@ const SEA := 1
 const START_DISTANCE := 16
 const START_DISTANCE_SHARE := 40   # per cent of the shorter side, when that is larger
 
+# A ring of eight directions, as integers scaled by a hundred. Starts are placed around
+# it rather than by trigonometry: the map has to come out identical on every device, and
+# the way to be sure of that is to never let a float near it.
+const RING := [Vector2i(100, 0), Vector2i(71, 71), Vector2i(0, 100), Vector2i(-71, 71),
+	Vector2i(-100, 0), Vector2i(-71, -71), Vector2i(0, -100), Vector2i(71, -71)]
+# More players want a wider ring, or they land in each other's laps - but never wider
+# than the map, or they all end up spiralled into the same corner of it.
+const RING_GROWTH := 12            # per cent of the base radius per player over two
+
 # Returns { "terrain": PackedByteArray, "starts": PackedInt32Array, "sea_percent": int }
 static func generate(seed_value: int, settings: WorldSettings) -> Dictionary:
 	var w := settings.width
@@ -90,20 +99,26 @@ static func _pick_starts(terrain: PackedByteArray, rng: SimRng,
 		starts.append(_nearest_free_land(terrain, cx + cy * w, starts, w, h))
 		return starts
 
-	var half := start_distance(settings) / 2
-	var diag := start_distance(settings) * 3 / 8
-	var offsets: Array[Vector2i] = []
-	match rng.next_range(4):
-		0: offsets = [Vector2i(-half, 0), Vector2i(half, 0)]
-		1: offsets = [Vector2i(0, -half), Vector2i(0, half)]
-		2: offsets = [Vector2i(-diag, -diag), Vector2i(diag, diag)]
-		_: offsets = [Vector2i(-diag, diag), Vector2i(diag, -diag)]
-
+	var radius := ring_radius(settings)
+	# Where the ring is turned to is rolled from the seed, purely so that two matches on
+	# the same map do not open identically.
+	var turn := rng.next_range(RING.size())
 	for i in range(count):
-		var o: Vector2i = offsets[i % offsets.size()]
-		var ideal := clampi(cx + o.x, 0, w - 1) + clampi(cy + o.y, 0, h - 1) * w
+		var o: Vector2i = RING[(turn + i * RING.size() / count) % RING.size()]
+		var ideal := clampi(cx + o.x * radius / 100, 0, w - 1) \
+			+ clampi(cy + o.y * radius / 100, 0, h - 1) * w
 		starts.append(_nearest_free_land(terrain, ideal, starts, w, h))
 	return starts
+
+# Half the distance two players are meant to open at, widened for every seat past the
+# second and then held inside the map.
+static func ring_radius(settings: WorldSettings) -> int:
+	var count := settings.player_count()
+	var radius := start_distance(settings) / 2
+	if count > 2:
+		radius = radius * (100 + (count - 2) * RING_GROWTH) / 100
+	var room := mini(settings.width, settings.height) / 2 - 2
+	return clampi(radius, 3, maxi(3, room))
 
 # Spiral outwards from the ideal spot until we land on a free land cell. Scanning by
 # growing radius keeps the result stable regardless of how the sea came out.

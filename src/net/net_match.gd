@@ -24,6 +24,9 @@ signal command_applied(player: int, type: int, a: int, b: int)
 signal opponent_disconnected
 signal connection_lost(reason: String)
 signal pause_changed(paused: bool)
+# The room while it fills up: who is in it, and who has just gone.
+signal roster_changed
+signal player_left(player: int)
 
 const GAME_PORT := 8910
 const HASH_EVERY := 50
@@ -39,7 +42,6 @@ var state: GameState = null
 var local_player := -1
 var is_host := false
 var paused := false
-var opponent_focus := -1
 
 # While hosting: the address this device is reachable at, and that address written as the
 # six characters the other player types. Both are empty when there is no network.
@@ -55,9 +57,16 @@ var bot: BotPlayer = null
 # The world the host chose. It travels to the joiner at match start, so both sides
 # generate the same map from the same seed.
 var settings := WorldSettings.new()
-# What the two sides call themselves. Exchanged when a match starts, so the panels
-# can say who did something rather than "the opponent".
-var opponent_name := ""
+# Everyone in the room, in seat order: seat 0 is the host. Filled while the room waits
+# and frozen when the match starts, at which point a seat's position in this list is the
+# player index the simulation knows it by.
+#
+# Each seat is { "peer": int, "name": String, "region": int, "here": bool }. On a client
+# it is what the host last sent; on the host it is the truth.
+var seats: Array[Dictionary] = []
+# Where each player is looking, for the marker on the map. One entry per seat, -1 when
+# they have not said.
+var focus_of: PackedInt32Array = PackedInt32Array()
 # The name this world is saved under, so saving again overwrites rather than piling
 # up a new file every time.
 var save_label := ""
@@ -70,6 +79,7 @@ var _peer_of_player: Dictionary = {}   # player index -> multiplayer peer id
 var _local_focus := -1
 var _focus_timer := 0.0
 var _join_deadline := 0
+var _greeted := false      # a client says who it is once, when it gets through
 
 func _ready() -> void:
 	multiplayer.peer_connected.connect(_on_peer_connected)
@@ -85,7 +95,7 @@ func host_room(room_name: String, world: WorldSettings = null) -> bool:
 	leave()
 	settings = chosen
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(GAME_PORT, 1)
+	var err := peer.create_server(GAME_PORT, maxi(1, chosen.player_count() - 1))
 	if err != OK:
 		# The port is the only thing that ever stops this, and saying so matters: "could
 		# not connect" sends people off to look at a router that is working fine, when the
@@ -96,6 +106,8 @@ func host_room(room_name: String, world: WorldSettings = null) -> bool:
 	multiplayer.multiplayer_peer = peer
 	is_host = true
 	mode = Mode.HOSTING
+	seats = [_seat(1, Prefs.display_name(), Prefs.region())]
+	emit_signal("roster_changed")
 	var addresses := LanDiscovery.local_ipv4s()
 	host_address = addresses[0] if addresses.size() > 0 else ""
 	room_code = RoomCode.encode(host_address)
@@ -131,6 +143,7 @@ func join_room(target: String) -> bool:
 	multiplayer.multiplayer_peer = peer
 	is_host = false
 	mode = Mode.JOINING
+	_greeted = false
 	_join_deadline = Time.get_ticks_msec() + JOIN_TIMEOUT_MS
 	emit_signal("lobby_status", I18n.t("connecting"))
 	return true
@@ -149,11 +162,13 @@ func leave() -> void:
 	state = null
 	bot = null
 	local_player = -1
-	opponent_focus = -1
-	opponent_name = ""
 	host_address = ""
 	room_code = ""
+	seats = []
+	focus_of = PackedInt32Array()
 	_join_deadline = 0
+	_greeted = false
+	emit_signal("roster_changed")
 	save_label = ""
 	_pending.clear()
 	_hash_log.clear()
@@ -167,6 +182,7 @@ func start_solo(seed_value: int, world: WorldSettings = null) -> void:
 	leave()
 	settings = chosen
 	is_host = true
+	seats = [_seat(1, Prefs.display_name(), Prefs.region())]
 	_start_local(seed_value, 0)
 
 # A world with nobody else in it: no opponent, no clock, no winning or losing. The same
@@ -178,6 +194,7 @@ func resume(state: GameState, bot_level: int) -> void:
 	leave()
 	settings = state.settings if state.settings != null else WorldSettings.new()
 	is_host = true
+	seats = [_seat(1, Prefs.display_name(), Prefs.region())]
 	if bot_level >= 0 and state.alive.size() > 1:
 		bot = BotPlayer.new(1, bot_level, state.map_seed ^ state.tick_count)
 	self.state = state
@@ -186,6 +203,9 @@ func resume(state: GameState, bot_level: int) -> void:
 	paused = false
 	_accumulator = 0.0
 	_hash_log.clear()
+	focus_of = PackedInt32Array()
+	focus_of.resize(state.player_count())
+	focus_of.fill(-1)
 	emit_signal("match_started")
 
 # Whether this world is one person's to save. Half of a match against another phone is
@@ -199,6 +219,7 @@ func start_free(world: WorldSettings) -> void:
 	leave()
 	settings = world
 	is_host = true
+	seats = [_seat(1, Prefs.display_name(), Prefs.region())]
 	_start_local(int(Time.get_unix_time_from_system()) ^ (randi() & 0xFFFF), 0)
 
 # Practice against the machine. Offline by design: there is no peer, no discovery and no
@@ -206,38 +227,169 @@ func start_free(world: WorldSettings) -> void:
 func start_practice(level: int, seed_value: int = 0, world: WorldSettings = null) -> void:
 	var chosen := world if world != null else WorldSettings.new()
 	chosen.mode = WorldSettings.Mode.MATCH
+	# One bot, so one opponent, whatever the room size in the lobby happens to be set to.
+	chosen.players = 2
 	leave()
 	settings = chosen
 	is_host = true
+	seats = [_seat(1, Prefs.display_name(), Prefs.region())]
 	var actual_seed := seed_value
 	if actual_seed == 0:
 		actual_seed = int(Time.get_unix_time_from_system()) ^ (randi() & 0xFFFF)
 	bot = BotPlayer.new(1, level, actual_seed)
 	_start_local(actual_seed, 0)
 
+# --- The room ---------------------------------------------------------------------
+
+static func _seat(peer: int, name: String, region: int) -> Dictionary:
+	return {"peer": peer, "name": name, "region": region, "here": true}
+
+# How many seats are filled, and how many the world was opened for.
+func room_size() -> int:
+	return seats.size()
+
+func room_capacity() -> int:
+	return settings.player_count() if settings != null else 2
+
+func seat_of_peer(peer: int) -> int:
+	for i in range(seats.size()):
+		if int(seats[i]["peer"]) == peer:
+			return i
+	return -1
+
+func name_of(player: int) -> String:
+	if bot != null and player == bot.player:
+		return "%s (%s)" % [I18n.t("bot"), I18n.bot_level_name(bot.level)]
+	if player >= 0 and player < seats.size():
+		var name := str(seats[player]["name"])
+		if not name.is_empty():
+			return name
+	if player == local_player:
+		return Prefs.display_name()
+	return "%s %d" % [I18n.t("player"), player + 1]
+
+# Whether that seat still has somebody behind it. A player who walks out leaves their
+# country standing: it stops doing anything, but it does not vanish mid-match.
+func is_here(player: int) -> bool:
+	if player < 0 or player >= seats.size():
+		return true
+	return bool(seats[player]["here"])
+
+func humans_here() -> int:
+	var count := 0
+	for seat in seats:
+		if bool(seat["here"]):
+			count += 1
+	return count
+
+# The host decides when the room is full enough to play. Everyone in it at that moment
+# gets a seat, and the seat order is the player order for the rest of the match.
+func start_room() -> bool:
+	if not is_host or mode != Mode.HOSTING or seats.size() < 2:
+		return false
+	discovery.stop_broadcast()
+	settings.players = seats.size()
+	var seed_value := int(Time.get_unix_time_from_system()) ^ (randi() & 0xFFFF)
+	var roster := _roster_wire()
+	_peer_of_player.clear()
+	for i in range(seats.size()):
+		_peer_of_player[i] = int(seats[i]["peer"])
+		if i > 0:
+			_begin_match.rpc_id(int(seats[i]["peer"]), seed_value, i, settings.to_dict(), roster)
+	_start_local(seed_value, 0)
+	return true
+
+func _roster_wire() -> Array:
+	var out: Array = []
+	for seat in seats:
+		out.append({"name": str(seat["name"]), "region": int(seat["region"])})
+	return out
+
+func _adopt_roster(roster: Array) -> void:
+	seats = []
+	for entry in roster:
+		var seat: Dictionary = entry
+		seats.append(_seat(0, str(seat.get("name", "")), int(seat.get("region", Regions.NONE))))
+	emit_signal("roster_changed")
+
 # --- Connection events -----------------------------------------------------------
 
 func _on_peer_connected(id: int) -> void:
 	if not is_host or mode != Mode.HOSTING:
 		return
-	# Two-player match: the host is player 0, whoever knocks is player 1.
-	_peer_of_player[0] = 1
-	_peer_of_player[1] = id
-	discovery.stop_broadcast()
-	var seed_value := int(Time.get_unix_time_from_system()) ^ (randi() & 0xFFFF)
-	_begin_match.rpc_id(id, seed_value, 1, settings.to_dict(), Prefs.display_name())
-	_start_local(seed_value, 0)
+	if seats.size() >= room_capacity():
+		# The room is full. Saying so and closing the door is kinder than a silent
+		# connection that never becomes a match.
+		_room_full.rpc_id(id)
+		multiplayer.multiplayer_peer.disconnect_peer(id)
+		return
+	# The name and the region arrive a moment later, in _hello; until then the seat is
+	# taken but nameless, which is exactly what it looks like on the host's screen.
+	seats.append(_seat(id, "", Regions.NONE))
+	_broadcast_roster()
+	emit_signal("lobby_status", I18n.t("waiting_player"))
 
-func _on_peer_disconnected(_id: int) -> void:
+# A client says who it is once, as soon as it is through the door.
+@rpc("any_peer", "call_remote", "reliable")
+func _hello(name: String, region: int) -> void:
+	if not is_host:
+		return
+	var seat := seat_of_peer(multiplayer.get_remote_sender_id())
+	if seat < 0:
+		return
+	seats[seat]["name"] = name
+	seats[seat]["region"] = region if Regions.valid(region) else Regions.NONE
+	_broadcast_roster()
+
+@rpc("authority", "call_remote", "reliable")
+func _roster(roster: Array) -> void:
+	_adopt_roster(roster)
+
+@rpc("authority", "call_remote", "reliable")
+func _room_full() -> void:
+	leave()
+	emit_signal("connection_lost", I18n.t("room_full"))
+
+func _broadcast_roster() -> void:
+	emit_signal("roster_changed")
+	if multiplayer.has_multiplayer_peer():
+		_roster.rpc(_roster_wire())
+
+func _on_peer_disconnected(id: int) -> void:
+	var seat := seat_of_peer(id) if is_host else -1
 	if mode == Mode.PLAYING:
-		paused = true
-		emit_signal("pause_changed", true)
-		emit_signal("opponent_disconnected")
-	elif mode == Mode.HOSTING:
+		if seat >= 0:
+			seats[seat]["here"] = false
+			emit_signal("player_left", seat)
+			if multiplayer.has_multiplayer_peer():
+				_player_left.rpc(seat)
+		# One person alone in what was a match is not a match. That is the case the
+		# waiting overlay was written for, and it is still the only one worth stopping
+		# the clock over: with four players, one leaving is just one fewer country.
+		if humans_here() <= 1:
+			paused = true
+			emit_signal("pause_changed", true)
+			emit_signal("opponent_disconnected")
+		return
+	if is_host and seat >= 0:
+		seats.remove_at(seat)
+		_broadcast_roster()
 		emit_signal("lobby_status", I18n.t("waiting_player"))
 
+@rpc("authority", "call_remote", "reliable")
+func _player_left(player: int) -> void:
+	if player >= 0 and player < seats.size():
+		seats[player]["here"] = false
+	emit_signal("player_left", player)
+
 func _on_connected() -> void:
-	emit_signal("lobby_status", I18n.t("connecting"))
+	# Through the door and into the room: the wait is now on the host, not the network,
+	# so the join clock stops here.
+	_join_deadline = 0
+	emit_signal("lobby_status", I18n.t("in_room"))
+	if not _greeted:
+		_greeted = true
+		_hello.rpc_id(1, Prefs.display_name(), Prefs.region())
 
 func _on_connect_failed() -> void:
 	leave()
@@ -256,19 +408,27 @@ func _start_local(seed_value: int, player: int) -> void:
 	paused = false
 	_accumulator = 0.0
 	_hash_log.clear()
+	_dress_players(seed_value)
+	focus_of = PackedInt32Array()
+	focus_of.resize(state.player_count())
+	focus_of.fill(-1)
 	emit_signal("match_started")
 
-@rpc("authority", "call_remote", "reliable")
-func _begin_match(seed_value: int, player: int, world: Dictionary, host_name: String) -> void:
-	settings = WorldSettings.from_dict(world)
-	opponent_name = host_name
-	_start_local(seed_value, player)
-	# The host does not know what to call us until we say so.
-	_introduce.rpc_id(1, Prefs.display_name())
+# Every seat gets the colour its region rolls up. Worked out from the seed on each
+# device rather than sent, so there is nothing to disagree about and a client that
+# resyncs mid-match keeps the colours it already had.
+func _dress_players(seed_value: int) -> void:
+	var regions := PackedByteArray()
+	for i in range(state.player_count()):
+		regions.append(int(seats[i]["region"]) if i < seats.size() else Regions.NONE)
+	Regions.assign_all(state, seed_value, regions)
 
-@rpc("any_peer", "call_remote", "reliable")
-func _introduce(name: String) -> void:
-	opponent_name = name
+@rpc("authority", "call_remote", "reliable")
+func _begin_match(seed_value: int, player: int, world: Dictionary, roster: Array) -> void:
+	settings = WorldSettings.from_dict(world)
+	_adopt_roster(roster)
+	_join_deadline = 0
+	_start_local(seed_value, player)
 
 @rpc("authority", "call_remote", "reliable")
 func _host_closing() -> void:
@@ -358,7 +518,7 @@ func _let_bot_play() -> void:
 		return
 	for cmd in bot.take_turn(state):
 		_queue(bot.player, int(cmd["type"]), int(cmd["a"]), int(cmd["b"]))
-	opponent_focus = bot.focus_cell
+	_note_focus(bot.player, bot.focus_cell)
 
 @rpc("authority", "call_remote", "reliable")
 func _advance(tick: int, batch: PackedInt32Array) -> void:
@@ -420,10 +580,22 @@ func _set_paused(value: bool) -> void:
 	paused = value
 	emit_signal("pause_changed", value)
 
-# --- Camera sharing: the opponent panel shows where the other player is looking ---
+# --- Camera sharing: the panels show where everyone else is looking ---------------
+#
+# Clients cannot talk to each other, so a look goes to the host and the host passes it
+# on. It is one small unreliable packet every half second per player.
 
 func set_local_focus(cell: int) -> void:
 	_local_focus = cell
+
+func focus_cell_of(player: int) -> int:
+	if player < 0 or player >= focus_of.size():
+		return -1
+	return int(focus_of[player])
+
+func _note_focus(player: int, cell: int) -> void:
+	if player >= 0 and player < focus_of.size():
+		focus_of[player] = cell
 
 func _report_focus(delta: float) -> void:
 	if mode != Mode.PLAYING or _local_focus < 0 or not multiplayer.has_multiplayer_peer():
@@ -433,14 +605,37 @@ func _report_focus(delta: float) -> void:
 		return
 	_focus_timer = 0.5
 	if is_host:
-		if _peer_of_player.has(1):
-			_focus.rpc_id(int(_peer_of_player[1]), _local_focus)
+		_note_focus(local_player, _local_focus)
+		_focus_set.rpc(local_player, _local_focus)
 	else:
-		_focus.rpc_id(1, _local_focus)
+		_focus_report.rpc_id(1, _local_focus)
 
 @rpc("any_peer", "call_remote", "unreliable")
-func _focus(cell: int) -> void:
-	opponent_focus = cell
+func _focus_report(cell: int) -> void:
+	if not is_host:
+		return
+	var player := seat_of_peer(multiplayer.get_remote_sender_id())
+	if player < 0:
+		return
+	_note_focus(player, cell)
+	_focus_set.rpc(player, cell)
 
+@rpc("authority", "call_remote", "unreliable")
+func _focus_set(player: int, cell: int) -> void:
+	_note_focus(player, cell)
+
+# Everyone in the match except whoever is holding this phone, in seat order.
+func others() -> PackedInt32Array:
+	var out := PackedInt32Array()
+	if state == null:
+		return out
+	for p in range(state.player_count()):
+		if p != local_player:
+			out.append(p)
+	return out
+
+# The one other player, when there is only one - a match against the bot, or one phone
+# against another. -1 in a crowd, where "the opponent" is not a person.
 func opponent_index() -> int:
-	return 1 - local_player
+	var rest := others()
+	return int(rest[0]) if rest.size() == 1 else -1

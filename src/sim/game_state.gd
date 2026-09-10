@@ -17,6 +17,7 @@ extends RefCounted
 enum Command { BUILD, DEMOLISH, CAPTURE, LAUNCH_SHIP, UPGRADE }
 
 const NEUTRAL := 255
+const NO_REGION := 255
 
 var map_seed: int
 var width: int
@@ -41,6 +42,14 @@ var tick_count: int = 0
 var finished: bool = false
 var winner: int = -1
 var settings: WorldSettings
+
+# Who each player is playing as: the region they picked, and the colour that came out of
+# its palette, packed as 0xRRGGBB. Cosmetic, and deliberately outside state_hash(): a
+# colour cannot put two devices out of step. It lives here rather than in the networking
+# because a snapshot, a save and a client being resynced all have to carry it, and this
+# is the thing all three already copy.
+var player_region: PackedByteArray
+var player_tint: PackedInt32Array
 
 # Running totals, per player. Maintained by _forget()/_remember(); verify_totals()
 # recounts the slow way and is what the tests measure them against.
@@ -87,6 +96,12 @@ static func create(seed_value: int, player_count_or_settings = 2) -> GameState:
 	s.capture_ready = PackedInt64Array()
 	var starts: PackedInt32Array = world["starts"]
 	var count := config.player_count()
+	s.player_region = PackedByteArray()
+	s.player_region.resize(count)
+	s.player_region.fill(NO_REGION)
+	s.player_tint = PackedInt32Array()
+	s.player_tint.resize(count)
+	s.player_tint.fill(0)
 	for p in range(count):
 		s.coins.append(Balance.START_COINS)
 		s.power.append(Balance.START_POWER)
@@ -96,6 +111,27 @@ static func create(seed_value: int, player_count_or_settings = 2) -> GameState:
 		s.owner_of[starts[p]] = p
 	s.recount()
 	return s
+
+# Set once, as a match starts, from what each player chose in the lobby.
+func set_identity(player: int, region: int, tint: int) -> void:
+	if player < 0 or player >= player_region.size():
+		return
+	player_region[player] = region if region >= 0 and region < NO_REGION else NO_REGION
+	player_tint[player] = tint
+
+func region_of(player: int) -> int:
+	if player < 0 or player >= player_region.size():
+		return NO_REGION
+	return int(player_region[player])
+
+# 0 when nobody chose, which is the interface's cue to fall back to its own pens.
+func tint_of(player: int) -> int:
+	if player < 0 or player >= player_tint.size():
+		return 0
+	return int(player_tint[player])
+
+func player_count() -> int:
+	return alive.size()
 
 func match_limit_ticks() -> int:
 	return settings.match_limit_ticks() if settings != null else Balance.MATCH_LIMIT_TICKS
@@ -715,6 +751,8 @@ func snapshot() -> Dictionary:
 		"power": power.duplicate(),
 		"alive": alive.duplicate(),
 		"capture_ready": capture_ready.duplicate(),
+		"region": player_region.duplicate(),
+		"tint": player_tint.duplicate(),
 		"ships": ship_copy,
 		"sites": site_copy,
 		"tick": tick_count,
@@ -736,6 +774,18 @@ static func from_snapshot(data: Dictionary) -> GameState:
 	s.power = data["power"]
 	s.alive = data["alive"]
 	s.capture_ready = data["capture_ready"]
+	# Saves written before players had faces carry no colours, and a world from one of
+	# those opens with the interface's own pens rather than with nothing at all.
+	s.player_region = data.get("region", PackedByteArray())
+	s.player_tint = data.get("tint", PackedInt32Array())
+	if s.player_region.size() != s.alive.size():
+		s.player_region = PackedByteArray()
+		s.player_region.resize(s.alive.size())
+		s.player_region.fill(NO_REGION)
+	if s.player_tint.size() != s.alive.size():
+		s.player_tint = PackedInt32Array()
+		s.player_tint.resize(s.alive.size())
+		s.player_tint.fill(0)
 	s.ships = []
 	for ship in data["ships"]:
 		s.ships.append((ship as Dictionary).duplicate(true))

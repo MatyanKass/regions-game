@@ -12,6 +12,9 @@ enum Mode { MATCH, FREE }
 const MIN_SIZE := 15
 const MAX_SIZE := 1000
 const SIZES := [25, 50, 100, 200, 400, 1000]
+# Owners are stored in a byte with 255 kept for "nobody", so the ceiling is technically
+# far higher; eight is where a phone screen and a 25x25 map give out.
+const MAX_PLAYERS := 8
 
 var width := 25
 var height := 25
@@ -19,6 +22,7 @@ var sea_percent := -1        # -1 means "roll one from the seed", as it always d
 var mode: int = Mode.MATCH
 var match_minutes := 40      # ignored in free play, which never runs out
 var bot_level := -1          # -1 means no bot: a human opponent, or nobody at all
+var players := 2             # seats in the match, including the host and any bot
 
 static func of_size(size: int) -> WorldSettings:
 	var s := WorldSettings.new()
@@ -37,7 +41,15 @@ func cells() -> int:
 	return width * height
 
 func player_count() -> int:
-	return 1 if mode == Mode.FREE else 2
+	if mode == Mode.FREE:
+		return 1
+	return clampi(players, 2, MAX_PLAYERS)
+
+# How far apart the seats can reasonably sit. Eight players on a 25x25 map start within
+# shouting distance of each other, so the lobby says so rather than letting someone find
+# out after the world is made.
+func crowded() -> bool:
+	return player_count() > 2 and cells() < player_count() * 200
 
 func match_limit_ticks() -> int:
 	if mode == Mode.FREE:
@@ -48,6 +60,7 @@ func to_dict() -> Dictionary:
 	return {
 		"w": width, "h": height, "sea": sea_percent,
 		"mode": mode, "minutes": match_minutes, "bot": bot_level,
+		"players": players,
 	}
 
 static func from_dict(data: Dictionary) -> WorldSettings:
@@ -58,4 +71,5 @@ static func from_dict(data: Dictionary) -> WorldSettings:
 	s.mode = int(data.get("mode", Mode.MATCH))
 	s.match_minutes = int(data.get("minutes", 40))
 	s.bot_level = int(data.get("bot", -1))
+	s.players = clampi(int(data.get("players", 2)), 2, MAX_PLAYERS)
 	return s

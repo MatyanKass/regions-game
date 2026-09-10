@@ -13,6 +13,7 @@ static var bot_level: int = BotPlayer.Level.NORMAL
 static var map_size: int = 25
 static var sea_choice: int = -1        # -1 leaves it to the seed
 static var match_minutes: int = 40
+static var room_players: int = 2       # seats the room is opened with
 
 const CARD_WIDTH := 470
 const WIDE_ENOUGH := 980   # below this the decorative board is dropped
@@ -26,6 +27,9 @@ var _saves_box: VBoxContainer
 var _code_card: PanelContainer
 var _code_label: Label
 var _code_note: Label
+var _roster_box: VBoxContainer
+var _start_button: Button
+var _country_button: Button
 
 func _ready() -> void:
 	var paper := UiKit.Paper.new()
@@ -64,6 +68,7 @@ func _ready() -> void:
 		columns.add_child(art)
 
 	Net.rooms_changed.connect(_refresh_rooms)
+	Net.roster_changed.connect(_refresh_room)
 	Net.lobby_status.connect(func(text: String): _status.text = text)
 	Net.connection_lost.connect(func(text: String):
 		_status.text = text
@@ -71,15 +76,19 @@ func _ready() -> void:
 		# socket with everything else, and a lobby that is not listening never finds a room
 		# again.
 		Net.browse_rooms()
-		_refresh_code()
+		_refresh_room()
 		_refresh_rooms())
 	Music.set_mood("calm")
 	Net.browse_rooms()
 	_refresh_rooms()
 	_refresh_saves()
 	# Hosting survives this screen being rebuilt - a language change does that - so the
-	# code has to come back with it rather than quietly vanish while the room is up.
-	_refresh_code()
+	# room has to come back with it rather than quietly vanish while it is up.
+	_refresh_room()
+	# Nobody has said where they are playing from yet: ask before anything else, because
+	# it is what their colour comes out of.
+	if not Prefs.has_region():
+		_open_country()
 
 func _menu_column() -> Control:
 	var column := VBoxContainer.new()
@@ -90,6 +99,10 @@ func _menu_column() -> Control:
 	var title := UiKit.heading(I18n.t("app_title"), 54)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(title)
+
+	var edition := UiKit.body(I18n.t("edition"), 15, Ink.PENS[1])
+	edition.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(edition)
 
 	var underline := UiKit.Underline.new()
 	underline.custom_minimum_size = Vector2(0, 18)
@@ -149,6 +162,13 @@ func _card_contents() -> Control:
 	_saves_box = VBoxContainer.new()
 	_saves_box.add_theme_constant_override("separation", 6)
 	box.add_child(_saves_box)
+
+	box.add_child(_divider(I18n.t("country")))
+	_country_button = Button.new()
+	_country_button.custom_minimum_size.y = 44
+	_country_button.pressed.connect(_open_country)
+	box.add_child(_country_button)
+	_refresh_country()
 
 	box.add_child(_divider(I18n.t("world")))
 	box.add_child(_world_settings())
@@ -234,6 +254,18 @@ func _world_settings() -> Control:
 		sea_choice = -1 if id == 100 else id)
 	grid.add_child(seas)
 
+	grid.add_child(UiKit.body(I18n.t("room_size"), 14, Ink.INK_SOFT))
+	var seats := OptionButton.new()
+	seats.custom_minimum_size = Vector2(160, 38)
+	for value in range(2, WorldSettings.MAX_PLAYERS + 1):
+		seats.add_item("%d" % value, value)
+	seats.select(seats.get_item_index(room_players))
+	UiKit.option(seats)
+	seats.item_selected.connect(func(index: int):
+		room_players = seats.get_item_id(index)
+		_update_world_note())
+	grid.add_child(seats)
+
 	grid.add_child(UiKit.body(I18n.t("match_length"), 14, Ink.INK_SOFT))
 	var lengths := OptionButton.new()
 	lengths.custom_minimum_size = Vector2(160, 38)
@@ -254,6 +286,8 @@ func _update_world_note() -> void:
 	var text := "%s %s" % [_thousands(cells), I18n.t("cells_count")]
 	if cells >= 40000:
 		text += "\n" + I18n.t("huge_world_hint")
+	if _chosen_world().crowded():
+		text += "\n" + I18n.t("crowded_hint")
 	_size_note.text = text
 
 static func _thousands(value: int) -> String:
@@ -269,6 +303,7 @@ func _chosen_world() -> WorldSettings:
 	var world := WorldSettings.of_size(map_size)
 	world.sea_percent = sea_choice
 	world.match_minutes = match_minutes
+	world.players = room_players
 	return world
 
 func _big_button(text: String, accent: Color = Ink.INK, filled: bool = false) -> Button:
@@ -358,6 +393,18 @@ func _room_code_card() -> PanelContainer:
 	_code_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_code_note)
 
+	box.add_child(_divider(I18n.t("players_in_room")))
+	_roster_box = VBoxContainer.new()
+	_roster_box.add_theme_constant_override("separation", 4)
+	box.add_child(_roster_box)
+
+	_start_button = Button.new()
+	_start_button.text = I18n.t("start_match")
+	_start_button.custom_minimum_size.y = 46
+	UiKit.button(_start_button, Ink.PENS[0], true)
+	_start_button.pressed.connect(_on_start_match)
+	box.add_child(_start_button)
+
 	var stop := Button.new()
 	stop.text = I18n.t("stop_hosting")
 	stop.custom_minimum_size.y = 38
@@ -366,13 +413,21 @@ func _room_code_card() -> PanelContainer:
 	box.add_child(stop)
 	return card
 
-func _refresh_code() -> void:
+# The room, from both sides of it: the host sees the code to read out and the button to
+# start, whoever joined sees who else is in and waits.
+func _refresh_room() -> void:
 	if _code_card == null:
 		return
-	_code_card.visible = Net.mode == Net.Mode.HOSTING
+	var hosting := Net.mode == Net.Mode.HOSTING
+	var joined := Net.mode == Net.Mode.JOINING and not Net.seats.is_empty()
+	_code_card.visible = hosting or joined
 	if not _code_card.visible:
 		return
-	if not Net.room_code.is_empty():
+
+	if not hosting:
+		_code_label.text = "—"
+		_code_note.text = I18n.t("waiting_host")
+	elif not Net.room_code.is_empty():
 		_code_label.text = Net.room_code
 		_code_note.text = "%s\n%s" % [I18n.t("code_hint"), Net.host_address]
 	elif not Net.host_address.is_empty():
@@ -384,12 +439,64 @@ func _refresh_code() -> void:
 		_code_label.text = "—"
 		_code_note.text = I18n.t("no_address")
 
+	_start_button.visible = hosting
+	_start_button.disabled = Net.room_size() < 2
+	_start_button.tooltip_text = "" if Net.room_size() >= 2 else I18n.t("need_two")
+	_refresh_roster(hosting)
+
+# One line per seat, in the pen its region offers, so the room looks like the match will.
+func _refresh_roster(hosting: bool) -> void:
+	for child in _roster_box.get_children():
+		child.queue_free()
+	for i in range(Net.seats.size()):
+		var seat: Dictionary = Net.seats[i]
+		var region := int(seat["region"])
+		var palette := Regions.palette(region)
+		var pen := Regions.colour_to_ink(int(palette[0])) if not palette.is_empty() \
+			else Ink.pen_of(i)
+		var name := str(seat["name"])
+		if name.is_empty():
+			name = I18n.t("joining")
+		var line := UiKit.body("%d. %s   ·   %s" % [i + 1, name, Regions.name_of(region)], 14, pen)
+		_roster_box.add_child(line)
+	var capacity := Net.room_capacity() if hosting else Net.seats.size()
+	var footer := UiKit.body("%d / %d" % [Net.seats.size(), capacity], 12, Ink.INK_SOFT)
+	_roster_box.add_child(footer)
+
+func _on_start_match() -> void:
+	if not Net.start_room():
+		_status.text = I18n.t("need_two")
+
 func _on_stop_hosting() -> void:
 	Net.leave()
 	Net.browse_rooms()
 	_status.text = ""
-	_refresh_code()
+	_refresh_room()
 	_refresh_rooms()
+
+# --- Where you play from -----------------------------------------------------------
+
+func _refresh_country() -> void:
+	if _country_button == null:
+		return
+	var region := Prefs.region()
+	var palette := Regions.palette(region)
+	var accent := Regions.colour_to_ink(int(palette[0])) if not palette.is_empty() else Ink.INK
+	_country_button.text = Regions.name_of(region)
+	UiKit.button(_country_button, accent, Regions.valid(region))
+
+func _open_country() -> void:
+	var panel := CountryPanel.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	panel.chosen.connect(func(_region: int):
+		panel.queue_free()
+		_refresh_country())
+	panel.closed.connect(func():
+		panel.queue_free()
+		_refresh_country())
+	add_child(panel)
 
 func _on_practice() -> void:
 	Net.start_practice(bot_level, 0, _chosen_world())
@@ -400,7 +507,7 @@ func _on_free_play() -> void:
 func _on_host() -> void:
 	if Net.host_room(_default_room_name(), _chosen_world()):
 		_status.text = I18n.t("waiting_player")
-	_refresh_code()
+	_refresh_room()
 
 func _join(target: String) -> void:
 	if target.is_empty():
