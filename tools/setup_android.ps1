@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # One-time machine setup for building the APK: Android SDK packages and a debug
 # keystore. Godot's own export templates are installed separately, from the editor
 # (Editor > Manage Export Templates) or by unpacking the .tpz for the matching version

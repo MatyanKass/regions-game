@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Builds the Android APK.
 #   powershell -File tools\build_apk.ps1            debug build, build\Regions.apk
 #   powershell -File tools\build_apk.ps1 -Release   release build (needs a real keystore)

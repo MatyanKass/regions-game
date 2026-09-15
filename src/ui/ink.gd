@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # The look of the game in one place: paper colours and the pen glyphs used for
 # buildings. Everything is drawn with lines and arcs rather than sprites, which keeps
 # the notebook style consistent and the repository free of binary art.
@@ -75,6 +76,7 @@ static func noise_at(n: int) -> float:
 	x = ((x ^ (x >> 13)) * 1274126177) & 0x7FFFFFFF
 	return float(x % 2001) / 1000.0 - 1.0
 
+# by MatyanKass
 # A seed taken from where the stroke is, so the same shape in the same place always
 # shakes the same way instead of shimmering every frame.
 static func _seed_of(a: Vector2, b: Vector2) -> int:
@@ -134,6 +136,7 @@ static func circle(ci: CanvasItem, centre: Vector2, radius: float, c: Color, w: 
 		points.append(centre + Vector2(cos(angle), sin(angle)) * radius * wobble)
 	poly(ci, points, c, w, true)
 
+# by MatyanKass
 static func arc(ci: CanvasItem, centre: Vector2, radius: float, from_deg: float,
 		to_deg: float, c: Color, w: float, steps: int = 10) -> void:
 	var points := PackedVector2Array()
@@ -275,6 +278,7 @@ static func _port(ci: CanvasItem, r: Rect2, c: Color, w: float) -> void:
 	circle(ci, Vector2(cx, y + sh * 0.2), sw * 0.12, c, w, 10)
 	arc(ci, Vector2(cx, y + sh * 0.55), sw * 0.34, 20, 160, c, w, 8)
 
+# by MatyanKass
 # A hurdle fence: four upright posts with a panel hung between each pair, every panel at
 # a slightly different height. Straight posts read far better at cell size than leaning
 # ones did, and the staggered panels are what make it a fence and not a table.

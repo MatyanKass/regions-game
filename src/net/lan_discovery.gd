@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Finding a game on the local network. The host shouts its room over UDP once a second;
 # everyone in the lobby listens and builds a list. No server, no internet.
 #
@@ -50,6 +51,7 @@ func start_broadcast(room_name: String, game_port: int, code: String = "") -> vo
 	_refresh_targets()
 	_last_broadcast_ms = 0
 
+# by MatyanKass
 func stop_broadcast() -> void:
 	if _broadcaster:
 		_broadcaster.close()
@@ -72,6 +74,7 @@ func stop_listen() -> void:
 func listening() -> bool:
 	return _listener != null
 
+# by MatyanKass
 func _try_bind() -> bool:
 	_last_bind_ms = Time.get_ticks_msec()
 	var socket := PacketPeerUDP.new()
@@ -149,6 +152,7 @@ func _refresh_targets() -> void:
 
 # --- The parts with no socket in them, so a test can have them --------------------
 
+# by MatyanKass
 # Every IPv4 address this device holds, loopback dropped, most likely LAN address first.
 # The order is what decides which address becomes the room code.
 static func local_ipv4s() -> PackedStringArray:

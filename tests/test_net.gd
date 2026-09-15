@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Joining a game: the room code, and the parts of discovery that do not need a socket.
 #
 # This is exactly the code that is hard to test by playing - two phones, a router that
@@ -20,6 +21,7 @@ func expect_eq(actual, expected, message: String) -> void:
 
 # --- The code -----------------------------------------------------------------------
 
+# by MatyanKass
 func test_a_code_is_six_characters_and_a_dash() -> void:
 	var code := RoomCode.encode("192.168.1.42")
 	expect_eq(code.length(), RoomCode.LENGTH + 1, "a code is six characters with a dash in it")
@@ -81,6 +83,7 @@ func test_an_address_no_code_can_carry_is_refused() -> void:
 			"::1", "192.168.1", "192.168.1.999", "hello"]:
 		expect_eq(RoomCode.encode(ip), "", "%s should have no code" % ip)
 
+# by MatyanKass
 func test_a_code_read_out_wrong_still_works() -> void:
 	var ip := "192.168.1.42"
 	var code := RoomCode.encode(ip)
@@ -156,6 +159,7 @@ func test_anything_else_on_the_port_is_ignored() -> void:
 		expect(LanDiscovery.parse_announcement(text).is_empty(),
 			"should not be taken for a room: %s" % text)
 
+# by MatyanKass
 func test_an_address_is_recognised_for_what_it_is() -> void:
 	for good in ["0.0.0.0", "192.168.1.1", "255.255.255.255"]:
 		expect(LanDiscovery.is_ipv4(good), "%s is an address" % good)

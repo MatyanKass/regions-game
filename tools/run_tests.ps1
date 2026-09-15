@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Runs the simulation tests headless - no editor, no window, no phone.
 #   powershell -File tools\run_tests.ps1
 # Exit code 0 means every test passed.

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # The lobby: play the bot, host a room, or join one of the rooms shouting on the local
 # network. Typing an address stays available because some networks drop broadcast
 # traffic.
@@ -124,6 +125,7 @@ func _menu_column() -> Control:
 	card.add_child(_card_contents())
 	return column
 
+# by MatyanKass
 func _card_contents() -> Control:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
@@ -542,6 +544,7 @@ func _refresh_rooms() -> void:
 		button.pressed.connect(func(): _join(str(ip)))
 		_rooms_box.add_child(button)
 
+# by MatyanKass
 func _open_settings() -> void:
 	var panel := SettingsPanel.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -560,6 +563,7 @@ func _rebuild() -> void:
 	parent.add_child(replacement)
 	queue_free()
 
+# by MatyanKass
 func _on_language() -> void:
 	I18n.toggle()
 	# Rebuilding is simpler and safer than hunting down every label.

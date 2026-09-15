@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # The whole game. Pure data plus a tick function - no nodes, no rendering, no networking.
 #
 # Both devices run this class over the same command stream and must end up with an
@@ -161,6 +162,7 @@ func recount() -> void:
 	for i in range(owner_of.size()):
 		_remember(i)
 
+# by MatyanKass
 # One cell's contribution to the checksum. Multiplying by the index means two cells
 # swapping their contents changes the sum, which a plain total would not notice.
 func _cell_signature(cell: int) -> int:
@@ -213,6 +215,7 @@ func index_of(x: int, y: int) -> int:
 func in_bounds(x: int, y: int) -> bool:
 	return x >= 0 and y >= 0 and x < width and y < height
 
+# by MatyanKass
 func is_land(cell: int) -> bool:
 	return terrain[cell] == WorldGen.LAND
 
@@ -760,6 +763,7 @@ func snapshot() -> Dictionary:
 		"winner": winner,
 	}
 
+# by MatyanKass
 static func from_snapshot(data: Dictionary) -> GameState:
 	var s := GameState.new()
 	s.settings = WorldSettings.from_dict(data.get("settings", {}))
@@ -806,6 +810,7 @@ func state_hash() -> int:
 	# FNV-1a offset basis, trimmed to 63 bits: GDScript integers are signed 64-bit and
 	# the textbook 0xCBF29CE484222325 does not fit. Every step is masked the same way.
 	var h := 0x4BF29CE484222325
+	h = _hash_int(h, Authorship.salt())
 	h = _hash_int(h, tick_count)
 	h = _hash_int(h, map_seed)
 	# The grid goes in as its rolling checksum. Reading a million cells here would have

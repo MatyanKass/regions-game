@@ -7,6 +7,17 @@ Build houses, factories, banks, barracks, military bases and ports on your cells
 power to take a bordering cell, or send a ship straight across open water to land on a
 far shore. Last state standing wins, or the larger one after 40 minutes.
 
+Made by [MatyanKass](https://github.com/MatyanKass). All rights reserved - see [LICENSE](LICENSE).
+
+## Download
+
+Builds are on the [Releases page](https://github.com/MatyanKass/regions-game/releases).
+
+* **Windows** - `Regions-windows.zip`. Unpack both files, `Regions.exe` and `Regions.pck`,
+  into one folder and run `Regions.exe`. If Windows says "Windows protected your PC",
+  click "More info", then "Run anyway".
+* **Android** - the `.apk`. Allow installing from unknown sources when the phone asks.
+
 Design notes (Russian): [Notes/Игра Regions.md](Notes/Игра%20Regions.md)
 
 Rules specification (Russian), complete enough to reimplement the game from:
@@ -44,11 +55,10 @@ moment they touch.
 
 ## Running it on a PC
 
-    powershell -File tools
-un.ps1              # the lobby, same as on a phone
-    powershell -File tools
-un.ps1 -Practice    # straight into a match against the bot
-    powershell -File toolsuild_windows.ps1    # a standalone build\Regions.exe
+    powershell -File tools\run.ps1                    # the lobby, same as on a phone
+    powershell -File tools\run.ps1 -Practice          # straight into a match against the bot
+    powershell -File tools\build_windows.ps1          # a standalone build\Regions.exe
+    powershell -File tools\build_windows.ps1 -Share   # build\Regions-windows.zip, to hand out
 
 The desktop build is the same game, mouse instead of finger: drag to pan, wheel to zoom,
 click where you would tap. A PC can host a room that phones join, which is the easiest
@@ -187,3 +197,10 @@ refused, and get off an island it has filled.
 
 Every tunable number lives in [src/sim/balance.gd](src/sim/balance.gd). Nothing else
 hardcodes a value, so retuning the match is a single-file edit.
+
+## License
+
+Copyright (c) 2026 MatyanKass. All rights reserved. The source is here to read, and the
+released builds are free to download and play; copying, changing or republishing the
+game or its code needs the author's written permission. See [LICENSE](LICENSE). The
+music belongs to its authors, listed in [CREDITS.md](CREDITS.md).

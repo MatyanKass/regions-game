@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # What opens when you tap one of your own buildings: what it is, what it gives at this
 # level, and the two things you can do with it - upgrade or demolish. A port also gets
 # its ship button here, because that is where a player looks for it.
@@ -69,6 +70,7 @@ func _init() -> void:
 	_demolish.pressed.connect(func(): emit_signal("demolish_requested"))
 	actions.add_child(_demolish)
 
+# by MatyanKass
 # A cell that is being worked on rather than built up: what is coming, how far along it
 # is, and the one thing that can be done about it.
 func show_site(state: GameState, player: int, cell: int) -> void:

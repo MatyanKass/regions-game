@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Builds a standalone Windows executable into build\Regions.exe.
 #   powershell -File tools\build_windows.ps1
 #   powershell -File tools\build_windows.ps1 -Share    build\share\Regions.exe + Regions.pck

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Plays a real two-instance match over the loopback interface, headless, and checks
 # that both sides finished on the same state hash.
 #   powershell -File tools\run_net_test.ps1

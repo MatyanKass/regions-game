@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Xorshift32. Deliberately hand-rolled instead of RandomNumberGenerator so that the
 # exact bit pattern is part of this repository and can never change under us with an
 # engine update - map generation has to stay identical on both phones.
@@ -8,6 +9,7 @@ const MASK := 0xFFFFFFFF
 
 var _state: int
 
+# by MatyanKass
 func _init(seed_value: int) -> void:
 	_state = seed_value & MASK
 	if _state == 0:

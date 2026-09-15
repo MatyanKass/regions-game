@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # The practice opponent.
 #
 # One decision function over the shared GameState, with no nodes, no timers and no
@@ -76,6 +77,7 @@ func _init(player_index: int, difficulty: int = Level.NORMAL, seed_value: int = 
 	_cfg = LEVELS[level]
 	_rng = SimRng.new(seed_value ^ (0x5BF03 * (player_index + 1)))
 
+# by MatyanKass
 func level_name() -> String:
 	return str(_cfg["name"])
 
@@ -200,6 +202,7 @@ func _has_capture_target(state: GameState) -> bool:
 			return true
 	return false
 
+# by MatyanKass
 func _building_counts(state: GameState) -> Dictionary:
 	var counts := {}
 	for type in Balance.BUILDINGS:
@@ -220,6 +223,7 @@ func _building_counts(state: GameState) -> Dictionary:
 			counts[type] = int(counts[type]) + 1
 	return counts
 
+# by MatyanKass
 # Mirrors the simulation's own conditions. Being wrong here only costs a refused command,
 # but a bot that keeps asking for what it cannot have would never get anything built.
 func _affordable(type: int, agg: Dictionary, coins: int, power: int) -> bool:

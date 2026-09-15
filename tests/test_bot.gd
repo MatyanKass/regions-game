@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # The practice opponent. A bot goes wrong quietly - it sits on a full purse, it keeps
 # asking for what the rules forbid, or it is simply no trouble to play against - so the
 # tests here play whole matches headless and look at how they went.
@@ -40,6 +41,7 @@ func _play(state: GameState, brains: Array, ticks: int) -> Dictionary:
 func _bot_brain(bot: BotPlayer) -> Callable:
 	return func(state: GameState) -> Array[Dictionary]: return bot.take_turn(state)
 
+# by MatyanKass
 # The opener the self-play robot plays: houses, then factories, then push the border.
 # It is the yardstick - a bot worth adding has to beat the simple greed we already had.
 func _greedy_brain(player: int) -> Callable:
@@ -137,6 +139,7 @@ func test_an_easy_bot_is_easier_than_a_hard_one() -> void:
 		"the hard bot should still be far ahead overall (hard %d, easy %d)"
 			% [total_hard, total_easy])
 
+# by MatyanKass
 func test_bot_takes_to_the_water_when_the_land_runs_out() -> void:
 	var state := _island_map()
 	var bot := BotPlayer.new(1, BotPlayer.Level.HARD, 3)
@@ -152,6 +155,7 @@ func test_bot_takes_to_the_water_when_the_land_runs_out() -> void:
 	expect(sailed, "boxed in on its island, the bot never built a port and sailed")
 	expect(_far_island_cells(state) > 0, "the bot never landed on the far island")
 
+# by MatyanKass
 func test_an_eliminated_bot_says_nothing() -> void:
 	var state := GameState.create(9)
 	state.alive[1] = 0

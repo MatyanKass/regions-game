@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # The match: map, camera, HUD and every panel the player can open.
 #
 # Input is organised around three modes chosen on the bottom bar, so a tap on the map
@@ -280,6 +281,7 @@ func _build_panels() -> void:
 		_open_pause())
 	_hud.add_child(_settings)
 
+# by MatyanKass
 # The pause menu. Only the host can stop the clock - a client asking the world to hold
 # still would be asking the other phone to wait - so for a joiner this is a menu over a
 # running match, which is the honest thing rather than a lie about being paused.
@@ -395,6 +397,7 @@ func _update_mood(delta: float) -> void:
 	_mood_timer = 1.0
 	Music.set_mood("combat" if _combat_left > 0.0 else "calm")
 
+# by MatyanKass
 func _note_fighting() -> void:
 	_combat_left = COMBAT_MUSIC_SECONDS
 
@@ -451,6 +454,7 @@ func _sync_site_sounds() -> void:
 		player.play()
 		_site_sounds[cell] = player
 
+# by MatyanKass
 func _on_advanced() -> void:
 	_sync_site_sounds()
 	map_view.state = Net.state

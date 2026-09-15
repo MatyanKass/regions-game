@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # How a world is set up before anyone plays in it. Kept apart from Balance: Balance is
 # the rules of the game and is the same everywhere, this is what the person who opened
 # the room chose for this particular match.
@@ -24,6 +25,7 @@ var match_minutes := 40      # ignored in free play, which never runs out
 var bot_level := -1          # -1 means no bot: a human opponent, or nobody at all
 var players := 2             # seats in the match, including the host and any bot
 
+# by MatyanKass
 static func of_size(size: int) -> WorldSettings:
 	var s := WorldSettings.new()
 	s.width = clampi(size, MIN_SIZE, MAX_SIZE)
@@ -56,6 +58,7 @@ func match_limit_ticks() -> int:
 		return 0   # no limit at all
 	return match_minutes * 60 * Balance.TICKS_PER_SECOND
 
+# by MatyanKass
 func to_dict() -> Dictionary:
 	return {
 		"w": width, "h": height, "sea": sea_percent,

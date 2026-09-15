@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Runs the game on this PC, straight from source. No build step.
 #   powershell -File tools\run.ps1              the lobby, same as on a phone
 #   powershell -File tools\run.ps1 -Practice    straight into a match against the bot

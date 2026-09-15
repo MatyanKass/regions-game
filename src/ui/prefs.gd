@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Autoloaded as /root/Prefs. What the player chose about the game itself, as opposed to
 # what they chose about a particular world: volumes and language.
 #
@@ -34,6 +35,7 @@ func _ensure_bus(name: String) -> void:
 	AudioServer.set_bus_name(index, name)
 	AudioServer.set_bus_send(index, "Master")
 
+# by MatyanKass
 func set_music_volume(value: float) -> void:
 	music_volume = clampf(value, 0.0, 1.0)
 	_apply()
@@ -64,6 +66,7 @@ func set_region(value: int) -> void:
 	save()
 	emit_signal("changed")
 
+# by MatyanKass
 func region() -> int:
 	return region_choice if Regions.valid(region_choice) else Regions.NONE
 
@@ -105,6 +108,7 @@ func load_now() -> void:
 		I18n.language = language
 	_apply()
 
+# by MatyanKass
 func save() -> void:
 	var file := ConfigFile.new()
 	file.set_value("audio", "music", music_volume)

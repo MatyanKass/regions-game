@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Big worlds, and the cache that makes them possible.
 #
 # The running totals in GameState are the one place the grid is not the single source of
@@ -100,6 +101,7 @@ func test_starts_move_apart_on_a_bigger_map() -> void:
 	var large := WorldGen.start_distance(WorldSettings.of_size(400))
 	expect(large > small * 4, "start distance has to scale with the map")
 
+# by MatyanKass
 func test_a_big_world_ticks_fast_enough_to_play() -> void:
 	# The host runs the clock, so a tick has to cost far less than the fiftieth of a
 	# second it represents. This is the test that would have failed before the running
@@ -119,6 +121,7 @@ func test_a_big_world_ticks_fast_enough_to_play() -> void:
 	expect(ms < 2000, "200 ticks on a 400 wide world took %d ms" % ms)
 	expect(s.verify_totals().is_empty(), "and the totals are still right afterwards")
 
+# by MatyanKass
 func test_the_largest_world_can_be_made_at_all() -> void:
 	var start := Time.get_ticks_msec()
 	var s := GameState.create(5, WorldSettings.of_size(WorldSettings.MAX_SIZE))

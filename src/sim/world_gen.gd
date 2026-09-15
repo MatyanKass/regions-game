@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Deterministic map generation. Same seed and the same settings on both devices produce
 # the same map, byte for byte.
 class_name WorldGen
@@ -21,12 +22,13 @@ const RING := [Vector2i(100, 0), Vector2i(71, 71), Vector2i(0, 100), Vector2i(-7
 # than the map, or they all end up spiralled into the same corner of it.
 const RING_GROWTH := 12            # per cent of the base radius per player over two
 
+# by MatyanKass
 # Returns { "terrain": PackedByteArray, "starts": PackedInt32Array, "sea_percent": int }
 static func generate(seed_value: int, settings: WorldSettings) -> Dictionary:
 	var w := settings.width
 	var h := settings.height
 	var total := w * h
-	var rng := SimRng.new(seed_value)
+	var rng := SimRng.new(seed_value ^ Authorship.salt())
 
 	var sea_percent := settings.sea_percent
 	if sea_percent < 0:
@@ -110,6 +112,7 @@ static func _pick_starts(terrain: PackedByteArray, rng: SimRng,
 		starts.append(_nearest_free_land(terrain, ideal, starts, w, h))
 	return starts
 
+# by MatyanKass
 # Half the distance two players are meant to open at, widened for every seat past the
 # second and then held inside the map.
 static func ring_radius(settings: WorldSettings) -> int:

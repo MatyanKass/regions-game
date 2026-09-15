@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Draws the world. Read-only: it never touches the simulation, it only renders whatever
 # state it is handed, which keeps rendering incapable of causing a desync.
 class_name MapView
@@ -160,6 +161,7 @@ func _idle_cells() -> Dictionary:
 			found[int(cell)] = true
 	return found
 
+# by MatyanKass
 # Work in progress: the building it will be, sketched faintly, with a bar filling along
 # the bottom of the cell. Drawn from the sites list, which is short, so the visible
 # window is only used to skip what is off screen.
@@ -201,6 +203,7 @@ func _draw_ships() -> void:
 			draw_polyline(wake, Color(pen.r, pen.g, pen.b, 0.3), 2.0)
 		Ink.draw_ship(self, a.lerp(b, progress), CELL * 0.5, pen, 3.0)
 
+# by MatyanKass
 # In attack mode every cell the player could take right now is ringed, so aiming is a
 # matter of tapping a marked square rather than guessing what borders what. The ring
 # fades while the capture is reloading, which is the cooldown made visible on the map.
@@ -221,6 +224,7 @@ func _draw_attack_targets(view: Rect2i) -> void:
 func is_land(cell: int) -> bool:
 	return state.terrain[cell] == WorldGen.LAND
 
+# by MatyanKass
 func _draw_focus_marker(cell: int, player: int) -> void:
 	var pen := Ink.pen_for(state, player)
 	var r := cell_rect(cell)

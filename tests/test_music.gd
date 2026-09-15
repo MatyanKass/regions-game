@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # The music loader. Cheap to test and easy to get wrong: the project folder lists both
 # a track and its .import sidecar, so a naive loader plays everything twice.
 extends RefCounted
@@ -10,6 +11,7 @@ func expect(condition: bool, message: String) -> void:
 	if not condition:
 		failures.append(message)
 
+# by MatyanKass
 func test_each_track_is_loaded_once() -> void:
 	var music = load("res://src/ui/music.gd").new()
 	for mood in ["calm", "combat"]:

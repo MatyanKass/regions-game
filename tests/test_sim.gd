@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Simulation tests. Run headless with tools/run_tests.ps1 - no phone, no window, no editor.
 extends RefCounted
 
@@ -314,6 +315,7 @@ func test_upgrade_scales_the_effect_and_the_price() -> void:
 	expect_eq(int(s.aggregate(0)["coin_cap"]), _expected_coin_cap(s, 0, 20 * Balance.UNIT),
 		"a level two bank holds twice as much")
 
+# by MatyanKass
 func test_upgrades_stop_at_the_ceiling() -> void:
 	var s := _state_with_coins(7, 5000 * Balance.UNIT)
 	var home := _home_of(s, 0)
@@ -569,6 +571,7 @@ func _inland_cell(s: GameState, player: int) -> int:
 			return i
 	return home
 
+# by MatyanKass
 func _coastal_cell(s: GameState, player: int) -> int:
 	for i in range(s.owner_of.size()):
 		if s.is_land(i) and s.touches_sea(i) and s.owner_of[i] == GameState.NEUTRAL:
@@ -592,6 +595,7 @@ func _find_sea_route(s: GameState, player: int) -> Dictionary:
 				return {"port": from, "target": cell}
 	return {}
 
+# by MatyanKass
 func _first_capturable(s: GameState, player: int) -> int:
 	for i in range(s.owner_of.size()):
 		if s.is_land(i) and s.owner_of[i] != player and s.touches_player(i, player):

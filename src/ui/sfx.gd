@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Autoloaded as /root/Sfx. Every sound effect is synthesised at startup rather than
 # shipped as a file: they are short blips, so a few lines of arithmetic beat a folder of
 # WAVs that need licences, and retuning one is editing a number rather than finding a new
@@ -76,6 +77,7 @@ var _players: Array[AudioStreamPlayer] = []
 var _next_voice := 0
 var _rng := SimRng.new(20260905)
 
+# by MatyanKass
 func _ready() -> void:
 	for name in RECIPES:
 		var supplied := _load_override(str(name))
@@ -87,6 +89,7 @@ func _ready() -> void:
 		add_child(player)
 		_players.append(player)
 
+# by MatyanKass
 # A hand-made file for this effect, if somebody has put one there. Returns null when
 # there is nothing to load, which is the normal case and means "use the synthesiser".
 func load_override(name: String) -> AudioStream:

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Saving and loading a world.
 #
 # A save is the simulation's own snapshot - the same thing the host sends a client that
@@ -16,6 +17,7 @@ const VERSION := 1
 const MAX_SLOTS := 12
 const AUTOSAVE := "autosave"
 
+# by MatyanKass
 # Writes the world under `slot`, replacing whatever was there. Returns "" on success or
 # a reason the interface can show.
 static func store(slot: String, label: String, state: GameState, bot_level: int) -> String:
@@ -64,6 +66,7 @@ static func load_state(slot: String) -> GameState:
 		return null
 	return GameState.from_snapshot(snapshot)
 
+# by MatyanKass
 static func bot_level_of(slot: String) -> int:
 	var data := _read(slot)
 	return int(data.get("bot_level", -1)) if not data.is_empty() else -1

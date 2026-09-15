@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Pacing. Land now pays, and income that grows with territory is exactly the shape that
 # can turn a lead into a runaway, so the pace of a whole match is worth a test rather
 # than a hope.
@@ -15,6 +16,7 @@ func test_two_hard_bots_play_a_whole_match_without_a_runaway() -> void:
 	for seed_value in [4242, 7, 991]:
 		_play_out(seed_value)
 
+# by MatyanKass
 func _play_out(seed_value: int) -> void:
 	var state := GameState.create(seed_value)
 	var bots := [BotPlayer.new(0, BotPlayer.Level.HARD, 11),

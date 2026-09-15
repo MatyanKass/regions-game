@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # The build menu: a grid of slots, the way an inventory chest looks. Each slot shows the
 # pen glyph of the building, its price, and greys out with the reason when it cannot go
 # on this particular cell - so the rules are learned from the menu itself.
@@ -17,6 +18,7 @@ const ORDER := [
 var _slots: Dictionary = {}     # building type -> Button
 var _captions: Dictionary = {}  # building type -> Label
 
+# by MatyanKass
 func _init() -> void:
 	UiKit.panel(self)
 

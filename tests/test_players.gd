@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # A room of more than two, and the colours everyone plays in.
 #
 # Two players was baked into the game in more places than it looked: the map put two
@@ -13,6 +14,7 @@ func expect(condition: bool, message: String) -> void:
 	if not condition:
 		failures.append(message)
 
+# by MatyanKass
 func expect_eq(actual, expected, message: String) -> void:
 	checks += 1
 	if actual != expected:
@@ -70,6 +72,7 @@ func test_a_full_room_is_a_crowd_on_a_small_map() -> void:
 
 # --- The match ----------------------------------------------------------------------
 
+# by MatyanKass
 func test_a_state_is_made_with_as_many_seats_as_the_room() -> void:
 	var state := GameState.create(11, _world(50, 6))
 	expect_eq(state.player_count(), 6, "six seats")
@@ -101,6 +104,7 @@ func test_the_match_ends_when_one_country_is_left() -> void:
 	expect(state.finished, "one player left ends it")
 	expect_eq(state.winner, 0, "and they are the winner")
 
+# by MatyanKass
 func test_when_time_runs_out_the_biggest_country_wins() -> void:
 	var world := _world(50, 5)
 	world.match_minutes = 1

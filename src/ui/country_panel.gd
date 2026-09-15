@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Where you are playing from. Asked once, on the first run, and changeable from the
 # lobby afterwards.
 #
@@ -59,6 +60,7 @@ func _init() -> void:
 	close.pressed.connect(func(): emit_signal("closed"))
 	box.add_child(close)
 
+# by MatyanKass
 func _region_button(region: int) -> Button:
 	var button := Button.new()
 	button.custom_minimum_size = Vector2(0, 52)

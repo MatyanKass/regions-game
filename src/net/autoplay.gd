@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # A robot player used only by tools/run_net_test.ps1. Headless instances host and join
 # over the loopback, play a scripted match against each other and print their final state
 # hash. Equal hashes mean the lockstep really holds end to end - the one thing the
@@ -21,6 +22,7 @@ var _last_action_tick := 0
 var _done := false
 var _quit_timer := 0.0
 
+# by MatyanKass
 func _ready() -> void:
 	if joining:
 		_try_join()
@@ -56,6 +58,7 @@ func _process(delta: float) -> void:
 	if _retry_timer <= 0.0:
 		_try_join()
 
+# by MatyanKass
 func _try_join() -> void:
 	_retries += 1
 	_retry_timer = 1.0

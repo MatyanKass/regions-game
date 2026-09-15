@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Autoloaded as /root/Music. Plays a calm track while a player is building up and
 # switches to a tense one the moment the two territories touch, crossfading between
 # them so the change is felt rather than heard as a cut.
@@ -64,6 +65,7 @@ func stop() -> void:
 	for mood in _players:
 		(_players[mood] as AudioStreamPlayer).stop()
 
+# by MatyanKass
 # Picks a track at random, but never the one that has just finished. With a dozen
 # tracks in the folders, hearing the same one twice in a row is the thing a player
 # actually notices.
@@ -75,6 +77,7 @@ func _pick(mood: String) -> AudioStream:
 	_last_played[mood] = index
 	return list[index]
 
+# by MatyanKass
 func _on_finished(mood: String) -> void:
 	if mood != _mood or (_tracks[mood] as Array).is_empty():
 		return

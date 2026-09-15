@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # A room code: the host's address on the local network, written as six characters.
 #
 #     192.168.1.42  <->  N50-7W3
@@ -37,6 +38,7 @@ const SCATTER_BACK := 0x34BD530D
 # cable between two machines. Anything else has to be typed out as an address.
 enum Kind { HOME, TEN, CARRIER, LINK_LOCAL }
 
+# by MatyanKass
 # Returns "" when the address is not one a code can carry - a public address, IPv6, or
 # something that cannot be a host.
 static func encode(ip: String) -> String:
@@ -139,6 +141,7 @@ static func normalise(text: String) -> String:
 			out += c
 	return out
 
+# by MatyanKass
 static func format(raw: String) -> String:
 	if raw.length() != LENGTH:
 		return raw

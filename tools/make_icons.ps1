@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Renders the app icon from the game's own drawing code into assets/icon.
 # A real window is opened for a moment: a headless renderer returns an empty texture.
 #   powershell -File tools\make_icons.ps1

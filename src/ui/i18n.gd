@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Two-language UI text. Small enough not to need Godot translation resources, and this
 # way every string the player can see is visible in one file.
 class_name I18n
@@ -190,6 +191,7 @@ const STRINGS := {
 	"e_nothing_to_upgrade": {"ru": "Улучшать нечего", "en": "Nothing to upgrade"},
 }
 
+# by MatyanKass
 static func detect_language() -> void:
 	language = "ru" if OS.get_locale_language() == "ru" else "en"
 
@@ -211,6 +213,7 @@ static func building_name(type: int) -> String:
 		return ""
 	return t("b_" + str(Balance.BUILDINGS[type]["name"]))
 
+# by MatyanKass
 # Simulation refusals come back as bare codes so the sim never depends on the UI.
 static func reason(code: String) -> String:
 	if code.is_empty():

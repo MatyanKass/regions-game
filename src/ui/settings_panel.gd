@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # The settings, as one panel that both the lobby and the pause menu put on screen. There
 # is exactly one of these so the two places cannot drift apart.
 class_name SettingsPanel
@@ -69,6 +70,7 @@ func _init() -> void:
 	note.custom_minimum_size.x = 340
 	column.add_child(note)
 
+# by MatyanKass
 # A labelled slider that reports as it moves, so the volume can be heard while it is
 # being set rather than only after letting go.
 func _slider(text: String, value: float, on_change: Callable) -> Control:

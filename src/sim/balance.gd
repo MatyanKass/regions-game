@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Every tunable number in the game lives here. No other sim file hardcodes a value,
 # so balancing the whole match is a single-file edit.
 #
@@ -148,6 +149,7 @@ const BUILDINGS := {
 static func upgrade_coin_cost(type: int, to_level: int) -> int:
 	return int(BUILDINGS[type]["coin_cost"]) * to_level
 
+# by MatyanKass
 static func upgrade_power_cost(type: int, to_level: int) -> int:
 	return int(BUILDINGS[type]["power_cost"]) * to_level
 
@@ -155,6 +157,7 @@ static func upgrade_power_cost(type: int, to_level: int) -> int:
 static func invested_coins(type: int, level: int) -> int:
 	return int(BUILDINGS[type]["coin_cost"]) * level * (level + 1) / 2
 
+# by MatyanKass
 static func build_ticks(type: int) -> int:
 	return int(BUILDINGS[type]["build_seconds"]) * TICKS_PER_SECOND
 

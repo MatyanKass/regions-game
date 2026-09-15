@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # The app icon, drawn rather than painted: a moment from a match on four by four cells.
 #
 # Two states meet down the middle. The blue one has thrown a barrier onto the front line
@@ -34,6 +35,7 @@ var transparent := false
 # The launcher crops adaptive icons hard, so the art shrinks into the middle for those.
 var inset := 0.06
 
+# by MatyanKass
 func _draw() -> void:
 	var side := minf(size.x, size.y)
 	var pad := side * inset

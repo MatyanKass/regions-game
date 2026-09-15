@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Saving and loading. A save is the simulation's own snapshot, so what this really tests
 # is that a world put away and picked up again is the same world and keeps behaving like
 # one - which is the only promise a save has to keep.
@@ -16,6 +17,7 @@ const SLOT := "test_world"
 func _cleanup() -> void:
 	SaveGame.erase(SLOT)
 
+# by MatyanKass
 func test_a_saved_world_comes_back_the_same() -> void:
 	_cleanup()
 	var s := GameState.create(31, WorldSettings.free_play(40))
@@ -97,6 +99,7 @@ func test_names_that_are_not_file_names_are_still_saved() -> void:
 	expect(SaveGame.slot_for("Alpha") == SaveGame.slot_for("Alpha"),
 		"and the same name must always give the same slot")
 
+# by MatyanKass
 func test_listing_is_newest_first_and_deleting_works() -> void:
 	SaveGame.erase("slot_a")
 	SaveGame.erase("slot_b")

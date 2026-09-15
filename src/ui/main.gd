@@ -1,7 +1,9 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Entry point. Owns exactly one screen at a time: the lobby or a match.
 extends Node
 
 var _screen: Node = null
+var _mark: AuthorMark = null
 var _screenshot_path := ""
 var _shot_countdown := 45
 var _shot_attack := false
@@ -12,6 +14,7 @@ var _shot_settings := false
 var _icon_dir := ""
 
 func _ready() -> void:
+	_keep_mark()
 	I18n.detect_language()
 	Net.match_started.connect(_open_match)
 	var args := OS.get_cmdline_user_args()
@@ -69,6 +72,7 @@ func _render_icons() -> void:
 	print("ICONS written to ", _icon_dir)
 	get_tree().quit(0)
 
+# by MatyanKass
 func _render_icon(px: int, path: String, transparent: bool, inset: float) -> void:
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(px, px)
@@ -93,6 +97,7 @@ func _downscale(from_path: String, to_path: String, px: int) -> void:
 	image.resize(px, px, Image.INTERPOLATE_LANCZOS)
 	image.save_png(to_path)
 
+# by MatyanKass
 # Preview mode only: hand the player a small built-up region so the screenshot shows
 # what a match actually looks like instead of one empty cell.
 func _stock_preview() -> void:
@@ -161,10 +166,20 @@ func _swap(screen: Node) -> void:
 		_screen.queue_free()
 	_screen = screen
 	add_child(screen)
+	_keep_mark()
+
+# by MatyanKass
+# The author's name stays on screen whatever else comes and goes. See AuthorMark.
+func _keep_mark() -> void:
+	if is_instance_valid(_mark) and _mark.is_inside_tree():
+		return
+	_mark = AuthorMark.new()
+	add_child(_mark)
 
 # Development helper: render a few frames, save a PNG and quit, so the look of the
 # game can be checked without a person sitting in front of the window.
 func _process(_delta: float) -> void:
+	_keep_mark()
 	if _screenshot_path.is_empty():
 		return
 	_shot_countdown -= 1

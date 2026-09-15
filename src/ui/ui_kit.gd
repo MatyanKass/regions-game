@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Shared interface pieces, so every panel and button in the game is cut from the same
 # cloth instead of each screen inventing its own look.
 #
@@ -47,6 +48,7 @@ static func glyph_for_icon(icon: int, px: float, colour: Color = Ink.INK) -> Gly
 
 # --- Boxes ------------------------------------------------------------------------
 
+# by MatyanKass
 static func box(bg: Color, border: Color, width: int = BORDER, radius: int = RADIUS,
 		margin: int = 12) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
@@ -60,6 +62,7 @@ static func box(bg: Color, border: Color, width: int = BORDER, radius: int = RAD
 static func panel(node: Control, bg: Color = Ink.PAPER_PANEL) -> void:
 	node.add_theme_stylebox_override("panel", box(bg, Ink.INK))
 
+# by MatyanKass
 # Buttons are paper tiles that press in: the border darkens and the fill sinks a shade,
 # which is enough feedback on a phone without any animation.
 static func button(node: Button, accent: Color = Ink.INK, filled: bool = false) -> void:

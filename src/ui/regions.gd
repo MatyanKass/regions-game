@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Where a player is playing from, and the colour that comes out of it.
 #
 # Picking a region is picking a palette, not a colour: Africa is yellow, orange or red,
@@ -33,6 +34,7 @@ const DEFAULT_PENS := [0x1B4FA0, 0xBD2F22, 0x1F7A4D, 0xC8961B,
 static func count() -> int:
 	return LIST.size()
 
+# by MatyanKass
 static func valid(region: int) -> bool:
 	return region >= 0 and region < LIST.size()
 
@@ -79,6 +81,7 @@ static func fallback(player: int, taken: PackedInt32Array = PackedInt32Array()) 
 			return colour
 	return int(DEFAULT_PENS[player % DEFAULT_PENS.size()])
 
+# by MatyanKass
 # Percent lighter or darker, staying inside the range a biro can be.
 static func shade(rgb: int, percent: int) -> int:
 	var out := 0

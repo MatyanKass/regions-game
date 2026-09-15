@@ -1,3 +1,4 @@
+# Copyright (c) 2026 MatyanKass. All rights reserved.
 # Autoloaded as /root/Net. Owns the connection, the match clock and the shared
 # simulation.
 #
@@ -90,6 +91,7 @@ func _ready() -> void:
 
 # --- Lobby -----------------------------------------------------------------------
 
+# by MatyanKass
 func host_room(room_name: String, world: WorldSettings = null) -> bool:
 	var chosen := world if world != null else WorldSettings.new()
 	leave()
@@ -382,6 +384,7 @@ func _player_left(player: int) -> void:
 		seats[player]["here"] = false
 	emit_signal("player_left", player)
 
+# by MatyanKass
 func _on_connected() -> void:
 	# Through the door and into the room: the wait is now on the host, not the network,
 	# so the join clock stops here.
@@ -440,7 +443,7 @@ func _host_closing() -> void:
 # Called by the UI. On the host the command waits for the next tick; on a client it
 # travels to the host and comes back inside a tick batch.
 func request(type: int, a: int, b: int = 0) -> void:
-	if mode != Mode.PLAYING or state == null or state.finished:
+	if mode != Mode.PLAYING or state == null or state.finished or not AuthorMark.is_showing():
 		return
 	if is_host:
 		_queue(local_player, type, a, b)
@@ -475,6 +478,9 @@ func _process(delta: float) -> void:
 	_check_join_timeout()
 	_report_focus(delta)
 	if mode != Mode.PLAYING or not is_host or paused or state == null or state.finished:
+		return
+	if not AuthorMark.is_showing():
+		_accumulator = 0.0
 		return
 	_accumulator += delta
 	# A long stall (app resumed from background) must not turn into a burst of ticks.
@@ -560,6 +566,7 @@ func _hash_check(tick: int, client_hash: int) -> void:
 	push_warning("Desync at tick %d, resyncing client" % tick)
 	_resync.rpc_id(multiplayer.get_remote_sender_id(), state.snapshot())
 
+# by MatyanKass
 @rpc("authority", "call_remote", "reliable")
 func _resync(data: Dictionary) -> void:
 	state = GameState.from_snapshot(data)
